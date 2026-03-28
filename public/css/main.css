@@ -1579,3 +1579,11 @@ tbody td { padding: 12px 16px; font-size: .84rem; vertical-align: middle; }
   color: var(--warning);
   line-height: 1.6;
 }
+
+/* Quote builder responsive */
+@media (max-width: 768px) {
+  .quote-layout { grid-template-columns: 1fr !important; }
+  .quote-layout > div:last-child { position: static !important; }
+  .quote-items-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .quote-items-scroll table { min-width: 520px; }
+}

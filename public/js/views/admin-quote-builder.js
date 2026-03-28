@@ -154,7 +154,7 @@ function renderBody(insp) {
   }
 
   document.getElementById('quote-builder-body').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start">
+    <div style="class="quote-layout" style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start">
 
       <!-- Left: line item editor -->
       <div style="display:flex;flex-direction:column;gap:16px">
