@@ -1,0 +1,14 @@
+{
+  "name": "firesafe-workflow-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Event-driven workflow engine for the Fire Flow inspection platform",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --experimental-vm-modules tests/test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
