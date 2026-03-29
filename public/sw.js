@@ -9,7 +9,7 @@
  * with an active service worker may keep running stale JS/CSS.
  */
 
-const CACHE_NAME = 'fireflow-v1';
+const CACHE_NAME = 'fireflow-v2';
 const SHELL_FILES = [
   '/',
   '/index.html',
