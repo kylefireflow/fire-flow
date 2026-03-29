@@ -52,7 +52,7 @@ export async function renderQuoteBuilder(container) {
       </div>
     </div>
 
-    <div id="quote-builder-body" style="display:flex;flex-direction:column;gap:16px;align-items:center;padding:48px">
+    <div id="quote-builder-body" style="overflow-x:hidden;max-width:100%">
       <div class="spinner"></div>
       <div style="color:var(--text-muted);font-size:.85rem">Loading…</div>
     </div>
