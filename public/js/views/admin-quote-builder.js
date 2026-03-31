@@ -186,7 +186,10 @@ function renderBody(insp) {
         <div class="card">
           <div class="flex-between" style="margin-bottom:14px">
             <div class="section-title">Line Items</div>
-            <button class="btn btn-ghost btn-sm" onclick="window._addLineItem()">+ Add Item</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="window._addEmergencyItem()">⚡ Emergency Service</button>
+              <button class="btn btn-ghost btn-sm" onclick="window._addLineItem()">+ Add Item</button>
+            </div>
           </div>
           <div id="line-items-table">
             ${renderLineItemsTable()}
@@ -234,7 +237,8 @@ function renderBody(insp) {
     </div>
   `;
 
-  window._addLineItem  = addLineItem;
+  window._addLineItem      = addLineItem;
+  window._addEmergencyItem = addEmergencyItem;
   window._removeItem   = removeItem;
   window._updateItem   = updateItem;
   window._previewQuote = () => window._notify?.info('PDF preview coming soon');
@@ -248,7 +252,7 @@ function renderLineItemsTable() {
   const rows = quoteItems.map(item => `
     <tr data-id="${item.id}">
       <td>
-        <span class="badge ${item.category === 'labor' ? 'badge-blue' : 'badge-orange'}" style="font-size:.68rem">${item.category}</span>
+        <span class="badge ${item.category === 'labor' ? 'badge-blue' : item.category === 'emergency' ? 'badge-red' : 'badge-orange'}" style="font-size:.68rem">${item.category}</span>
       </td>
       <td>
         <input class="form-input" style="font-size:.82rem;padding:6px 10px"
@@ -339,7 +343,7 @@ function renderCategoryBreakdown() {
   }
   return Object.entries(cats).map(([cat, amt]) => `
     <div style="display:flex;justify-content:space-between;font-size:.82rem;padding:5px 0;border-bottom:1px solid var(--border)">
-      <span class="badge ${cat === 'labor' ? 'badge-blue' : 'badge-orange'}">${cat}</span>
+      <span class="badge ${cat === 'labor' ? 'badge-blue' : cat === 'emergency' ? 'badge-red' : 'badge-orange'}">${cat}</span>
       <span style="font-weight:600">$${amt.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
     </div>
   `).join('');
@@ -354,6 +358,18 @@ function addLineItem() {
     qty:         1,
     unitPrice:   0,
     category:    'labor',
+    locked:      false,
+  });
+  recalc();
+}
+
+function addEmergencyItem() {
+  quoteItems.push({
+    id:          'li_emg_' + Date.now(),
+    description: 'Emergency Service Fee',
+    qty:         1,
+    unitPrice:   0,
+    category:    'emergency',
     locked:      false,
   });
   recalc();
