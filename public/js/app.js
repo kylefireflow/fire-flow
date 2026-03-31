@@ -72,7 +72,7 @@ export function navigate(path) {
 // Expose globally for inline onclick and views (avoids circular imports)
 window._navigate = navigate;
 
-window.addEventListener('popstate', () => render(location.pathname));
+window.addEventListener('popstate', () => { if (!_inspectionInProgress) render(location.pathname); });
 
 function render(path) {
   // Public routes — rendered without auth, no shell chrome
