@@ -32,6 +32,13 @@ function calcItemPrice(type, p) {
   const l = _LABOR_MAP[type] ?? _LABOR_MAP['_default'];
   return Math.round(Math.max(p.minServiceFee,(l.hours*p.laborRate)+(l.materials*(1+p.materialMarkupPercent/100)))*100)/100;
 }
+function calculateLineItemPrice(type, p, isEmergency) {
+  const base = calcItemPrice(type, p);
+  return isEmergency ? Math.round(base * (p.emergencyMultiplier ?? 1.5) * 100) / 100 : base;
+}
+function buildCallOutLineItem(pricing) {
+  return { id: 'li_callout', description: 'Service Call / Call-Out Fee', category: 'callout', qty: 1, unitPrice: pricing.callOutFee ?? 100, locked: true };
+}
 
 // HTML-escape helper — keeps this module self-contained so it's safe even
 // before window._escapeHtml is set by app.js.
