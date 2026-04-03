@@ -36,6 +36,7 @@ const SYSTEM_TYPES = [
   'Fire Alarm — Addressable', 'Fire Alarm — Conventional', 'Fire Alarm — Wireless',
   'Kitchen Hood Suppression (Ansul)', 'Clean Agent System (FM-200)',
   'Backflow Preventer', 'Fire Pump', 'Fire Extinguisher',
+  'Tenant Improvement',
 ];
 
 const CHECKPOINT_SETS = {

@@ -104,4 +104,22 @@ export const NFPA13_CHECKLISTS = {
     { code:'PH-07', label:'General Observations', description:'Note any piping or hanger conditions not covered above.', type:'notes', required:false, nfpa:'NFPA 25 4.1' },
   ],
 
+  'Tenant Improvement': [
+    { code:'TI-01', label:'Sprinkler Coverage Not Impaired', description:'New walls, soffits, or ceilings do not block or obstruct sprinkler discharge patterns. No unprotected pockets created.', type:'pass_fail', required:true,  nfpa:'NFPA 25 5.2.1 / NFPA 13 8.5' },
+    { code:'TI-02', label:'Sprinkler Head Clearance (18 in)', description:'Minimum 18-inch clearance maintained between sprinkler deflectors and the top of any new storage, shelving, or racking.', type:'pass_fail', required:true,  nfpa:'NFPA 25 5.2.1' },
+    { code:'TI-03', label:'Sprinkler Heads Undamaged by Construction', description:'No heads painted, capped, taped over, bent, or otherwise damaged during TI work. Confirm with visual inspection of all heads in affected area.', type:'pass_fail', required:true,  nfpa:'NFPA 25 5.2.1.1' },
+    { code:'TI-04', label:'Head Temperature Rating Matches Occupancy', description:'Sprinkler temperature rating appropriate for the new occupancy/use (e.g. ordinary 135-170°F for office; intermediate for areas near heat sources).', type:'pass_fail', required:true,  nfpa:'NFPA 13 6.2.3' },
+    { code:'TI-05', label:'Head Type Matches Ceiling / Exposure', description:'Concealed, recessed, or standard pendent/upright heads match new ceiling type and finish. Correct escutcheon plates installed.', type:'pass_fail', required:true,  nfpa:'NFPA 13 6.2.4' },
+    { code:'TI-06', label:'No Obstructions Within 18 in of Deflector', description:'No new beams, ducts, cable trays, or partitions within 18 inches horizontally of any sprinkler deflector that could obstruct spray pattern.', type:'pass_fail', required:true,  nfpa:'NFPA 13 8.5.5' },
+    { code:'TI-07', label:'Hazard Classification Unchanged or Upgraded', description:'Confirm new tenant use does not increase hazard classification (Light → Ordinary → Extra Hazard) beyond the original system design. If hazard increased, hydraulic re-analysis required.', type:'pass_fail', required:true,  nfpa:'NFPA 13 5.2 / NFPA 25 4.1.2' },
+    { code:'TI-08', label:'Hydraulic Design Placard Present', description:'Hydraulic nameplate/placard on riser reflects current system configuration. If piping was modified, updated hydraulic calculations on file.', type:'pass_fail', required:true,  nfpa:'NFPA 13 27.2 / NFPA 25 4.1.2' },
+    { code:'TI-09', label:'No Unauthorized Pipe Modifications', description:'No field-modified branch lines, added or relocated heads, or changed pipe sizes without engineer approval and permit.', type:'pass_fail', required:true,  nfpa:'NFPA 25 4.1.2' },
+    { code:'TI-10', label:'Control Valve Open and Supervised', description:'Main control valve and all zone valves fully open, locked or electrically supervised.', type:'pass_fail', required:true,  nfpa:'NFPA 25 13.2.1' },
+    { code:'TI-11', label:'System Pressure at Riser', description:'Record static pressure at riser gauge. Compare to design working pressure on hydraulic placard.', type:'numeric', required:true,  nfpa:'NFPA 25 5.3.2', unit:'psi' },
+    { code:'TI-12', label:'Waterflow Alarm Test', description:'Waterflow alarm activates within 90 seconds of opening inspector test valve.', type:'pass_fail', required:true,  nfpa:'NFPA 25 5.3.3' },
+    { code:'TI-13', label:'As-Built Drawings Updated', description:'Updated as-built drawings for TI scope are on site or on file with AHJ. Drawings reflect any new or relocated heads.', type:'pass_fail', required:false, nfpa:'NFPA 25 4.1.2' },
+    { code:'TI-14', label:'Permit / Final Sign-Off', description:'Building/fire department permit for TI fire sprinkler work obtained. Final inspection by AHJ scheduled or completed.', type:'pass_fail', required:false, nfpa:'NFPA 13 1.12' },
+    { code:'TI-15', label:'General Observations', description:'Note any conditions specific to this TI not covered above.', type:'notes', required:false, nfpa:'NFPA 25 4.1' },
+  ],
+
 };
