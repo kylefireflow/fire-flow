@@ -405,8 +405,8 @@ function bindStep3() {
     const len = password.length;
     if (!len) { pwStrength.textContent = ''; return; }
     if (len < 8)  { pwStrength.textContent = '⚠ Too short (min 8 characters)'; pwStrength.style.color = 'var(--error)'; return; }
-    if (len < 12) { pwStrength.textContent = '👍 Good';   pwStrength.style.color = 'var(--success)'; return; }
-    pwStrength.textContent = '💪 Strong';
+    if (len < 12) { pwStrength.textContent = 'Good';   pwStrength.style.color = 'var(--success)'; return; }
+    pwStrength.textContent = 'Strong';
     pwStrength.style.color = 'var(--success)';
   });
 
@@ -463,7 +463,7 @@ function showSuccessState() {
   if (!card) return;
   card.innerHTML = `
     <div style="text-align:center;padding:16px 0">
-      <div style="font-size:3rem;margin-bottom:16px">🎉</div>
+      
       <h2 style="font-size:1.3rem;font-weight:800;margin:0 0 10px">Account created!</h2>
       <p style="font-size:.9rem;color:var(--text-muted);line-height:1.6;margin:0 0 28px">
         Welcome to Fire Flow, <strong>${_esc(companyName)}</strong>.<br>

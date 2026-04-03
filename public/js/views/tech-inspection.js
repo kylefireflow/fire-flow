@@ -507,8 +507,8 @@ function deficiencyEditCard(d, i, categoryKeys) {
           <label class="form-label">Severity</label>
           <select class="form-select"
             onchange="window._updateDeficiency('${esc(d.id)}','severity',this.value)">
-            <option value="critical" ${d.severity === 'critical' ? 'selected' : ''}>🔴 Critical — immediate danger or code violation</option>
-            <option value="major"    ${d.severity === 'major'    ? 'selected' : ''}>🟡 Major — needs repair soon</option>
+            <option value="critical" ${d.severity === 'critical' ? 'selected' : ''}>Critical — immediate danger or code violation</option>
+            <option value="major"    ${d.severity === 'major'    ? 'selected' : ''}>Major — needs repair soon</option>
             <option value="minor"    ${d.severity === 'minor'    ? 'selected' : ''}>⚪ Minor — monitor or cosmetic</option>
           </select>
         </div>
@@ -556,7 +556,7 @@ function renderPhotosStep() {
       `}
 
       <div class="card">
-        <div style="font-size:.85rem;font-weight:600;margin-bottom:10px">📸 General Site Photos</div>
+        <div style="font-size:.85rem;font-weight:600;margin-bottom:10px">General Site Photos</div>
         <label class="photo-zone" for="photo-general">
           <div class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
           <div>Add general site photos (tap to select multiple)</div>
@@ -602,11 +602,11 @@ function renderSubmitStep() {
         <div class="section-title" style="margin-bottom:14px">Inspection Summary</div>
         <div class="grid-2" style="gap:12px;margin-bottom:16px">
           ${summaryItem('Property', esc(draft.address))}
-          ${summaryItem('🔧 System', esc(draft.system_type))}
+          ${summaryItem('System', esc(draft.system_type))}
           ${summaryItem('Passed', `${passCount} checkpoints`)}
           ${summaryItem('❌ Failed', `${failCount} checkpoints`)}
           ${summaryItem('⚠ Deficiencies', draft.deficiencies.length + ' found')}
-          ${summaryItem('💵 Est. Repairs', totalCost ? `$${totalCost.toLocaleString()}` : 'N/A')}
+          ${summaryItem('Est. Repairs', totalCost ? `$${totalCost.toLocaleString()}` : 'N/A')}
           ${summaryItem('Photos', draft.photos.length + ' attached')}
         </div>
 

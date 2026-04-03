@@ -15,12 +15,12 @@ import { api } from '../api.js';
 import { notify } from '../toast.js';
 
 const STAGES = [
-  { id: 'booked',       label: 'Booked',        color: 'badge-blue',   icon: '📋' },
+  { id: 'booked',       label: 'Booked',        color: 'badge-blue',   icon: '' },
   { id: 'in_progress',  label: 'In Progress',   color: 'badge-orange', icon: '⚙️' },
-  { id: 'needs_review', label: 'Needs Review',  color: 'badge-yellow', icon: '🔍' },
-  { id: 'quoted',       label: 'Quoted',        color: 'badge-blue',   icon: '💰' },
+  { id: 'needs_review', label: 'Needs Review',  color: 'badge-yellow', icon: '' },
+  { id: 'quoted',       label: 'Quoted',        color: 'badge-blue',   icon: '' },
   { id: 'approved',     label: 'Approved',      color: 'badge-green',  icon: '✅' },
-  { id: 'completed',    label: 'Completed',     color: 'badge-gray',   icon: '🏁' },
+  { id: 'completed',    label: 'Completed',     color: 'badge-gray',   icon: '' },
 ];
 
 // Module-level jobs store keyed by stage — populated from API
@@ -39,7 +39,7 @@ export async function renderPipeline(container) {
         <div class="page-subtitle" id="pipeline-subtitle">Loading…</div>
       </div>
       <div class="flex-row">
-        <input class="form-input" style="width:200px" placeholder="🔍 Filter jobs…" id="pipeline-filter" oninput="window._filterPipeline(this.value)">
+        <input class="form-input" style="width:200px" placeholder="Filter jobs…" id="pipeline-filter" oninput="window._filterPipeline(this.value)">
         <button class="btn btn-primary" onclick="window._navigate('/inspection/new')">+ New Inspection</button>
       </div>
     </div>
@@ -206,12 +206,12 @@ function renderJobCard(job, stage) {
       <div class="pipeline-card-id">${job.id.slice(0, 12)}</div>
       <div class="pipeline-card-title">${job.address}</div>
       <div class="pipeline-card-meta">
-        <span>🔧 ${job.type}</span>
-        <span>👷 ${job.tech}</span>
-        ${job.scheduled     ? `<span>📅 ${job.scheduled}</span>` : ''}
+        <span>${job.type}</span>
+        <span>${job.tech}</span>
+        ${job.scheduled     ? `<span>${job.scheduled}</span>` : ''}
         ${job.started       ? `<span style="color:var(--brand)">▶ ${job.started}</span>` : ''}
         ${job.deficiencies  ? `<span style="color:var(--danger)">⚠ ${job.deficiencies} deficiencies</span>` : ''}
-        ${job.quoteAmt      ? `<span style="color:var(--success)">💵 ${job.quoteAmt}</span>` : ''}
+        ${job.quoteAmt      ? `<span style="color:var(--success)">${job.quoteAmt}</span>` : ''}
         ${job.completedDate ? `<span>✓ ${job.completedDate}</span>` : ''}
       </div>
       ${actions ? `<div class="flex-row mt-1" style="gap:6px">${actions}</div>` : ''}
@@ -385,12 +385,12 @@ function showJobDetail(job, stageId) {
 
         <div style="display:flex;flex-direction:column;gap:16px">
           <div class="grid-2" style="gap:12px">
-            ${detailRow('🔧 Type',        job.type)}
-            ${detailRow('👷 Technician',  job.tech)}
-            ${job.scheduled     ? detailRow('📅 Scheduled',   job.scheduled)    : ''}
+            ${detailRow('Type',        job.type)}
+            ${detailRow('Technician',  job.tech)}
+            ${job.scheduled     ? detailRow('Scheduled',   job.scheduled)    : ''}
             ${job.started       ? detailRow('▶ Started',      job.started)      : ''}
             ${job.deficiencies != null ? detailRow('⚠ Deficiencies', `${job.deficiencies} found`) : ''}
-            ${job.quoteAmt      ? detailRow('💵 Quote',        job.quoteAmt)     : ''}
+            ${job.quoteAmt      ? detailRow('Quote',        job.quoteAmt)     : ''}
             ${job.completedDate ? detailRow('✓ Completed',    job.completedDate) : ''}
           </div>
 

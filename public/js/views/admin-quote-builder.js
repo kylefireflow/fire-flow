@@ -187,7 +187,7 @@ function renderBody(insp) {
           <div class="flex-between" style="margin-bottom:14px">
             <div class="section-title">Line Items</div>
             <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="window._addEmergencyItem()">⚡ Emergency Service</button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="window._addEmergencyItem()">Emergency Service</button>
               <button class="btn btn-ghost btn-sm" onclick="window._addLineItem()">+ Add Item</button>
             </div>
           </div>
@@ -198,7 +198,7 @@ function renderBody(insp) {
 
         <!-- Notes -->
         <div class="card">
-          <div class="section-title" style="margin-bottom:10px">📝 Notes & Terms</div>
+          <div class="section-title" style="margin-bottom:10px">Notes & Terms</div>
           <textarea class="form-textarea" id="q-notes" style="min-height:100px">${quoteNotes}</textarea>
         </div>
       </div>

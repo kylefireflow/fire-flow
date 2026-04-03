@@ -217,10 +217,10 @@ function _jobCard(job) {
           ${statusBadge[job.status] ?? ''}
         </div>
         <div class="job-meta-row">
-          <span>🔧 ${_esc(job.type)}</span>
+          <span>${_esc(job.type)}</span>
           ${job.city ? `<span>${_esc(job.city)}</span>` : ''}
           ${job.phone ? `<a href="tel:${_esc(job.phone)}" onclick="event.stopPropagation()"
-            style="color:var(--brand);font-weight:600">📞 Call</a>` : ''}
+            style="color:var(--brand);font-weight:600">Call</a>` : ''}
         </div>
         ${isActive && job.status === 'in_progress' ? `
           <div class="job-actions">
@@ -235,7 +235,7 @@ function _jobCard(job) {
               ▶ Start Job
             </button>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();window._getDirections('${job.address}')">
-              🗺 Directions
+              Directions
             </button>
           </div>
         ` : ''}
@@ -265,14 +265,14 @@ function _activeJobPanel(job) {
           <div style="font-weight:700;font-size:.95rem">${_esc(job.address)}</div>
           ${job.city ? `<div style="font-size:.82rem;color:var(--text-muted)">${_esc(job.city)}</div>` : ''}
           <button class="btn btn-ghost btn-sm mt-1" onclick="window._getDirections('${_esc(job.address)}')">
-            🗺 Get Directions
+            Get Directions
           </button>
         </div>
 
         ${job.contact || job.phone ? `
           <!-- Contact -->
           <div style="background:var(--bg-raised);border-radius:var(--r-md);padding:14px">
-            <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:4px">👤 Contact</div>
+            <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:4px">Contact</div>
             ${job.contact ? `<div style="font-size:.875rem;font-weight:600">${_esc(job.contact)}</div>` : ''}
             ${job.phone   ? `<a href="tel:${_esc(job.phone)}" style="font-size:.82rem;color:var(--brand);margin-top:4px;display:block">${_esc(job.phone)}</a>` : ''}
           </div>
@@ -280,7 +280,7 @@ function _activeJobPanel(job) {
 
         <!-- System / type info -->
         <div style="background:var(--bg-raised);border-radius:var(--r-md);padding:14px">
-          <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:4px">🔧 Inspection Type</div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:4px">Inspection Type</div>
           <div style="font-size:.875rem;font-weight:600">${_esc(job.type)}</div>
           ${job.system ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">${_esc(job.system)}</div>` : ''}
         </div>
@@ -288,7 +288,7 @@ function _activeJobPanel(job) {
         <!-- Notes -->
         ${job.notes ? `
           <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--r-md);padding:12px">
-            <div style="font-size:.72rem;color:var(--warning);font-weight:700;margin-bottom:4px">📝 Notes</div>
+            <div style="font-size:.72rem;color:var(--warning);font-weight:700;margin-bottom:4px">Notes</div>
             <div style="font-size:.82rem;color:var(--text-subtle)">${_esc(job.notes)}</div>
           </div>
         ` : ''}

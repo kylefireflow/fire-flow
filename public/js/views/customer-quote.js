@@ -285,7 +285,7 @@ function showDeclinedState() {
   if (!el) return;
   el.innerHTML = `
     <div style="text-align:center;padding:60px 24px">
-      <div style="font-size:3rem;margin-bottom:20px">👍</div>
+      
       <h2 style="font-size:1.4rem;font-weight:800;margin:0 0 12px">Got it — quote declined</h2>
       <p style="font-size:.9rem;color:var(--text-muted);line-height:1.7;max-width:380px;margin:0 auto">
         We've recorded your decision. If you change your mind or have questions, contact us at

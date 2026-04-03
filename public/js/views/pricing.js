@@ -74,7 +74,7 @@ export function renderPricing(container) {
               line-height:1.5;
               margin-bottom:20px;
             ">
-              💡 "Perfect for small teams — start using Fire Flow today and cut inspection time in half."
+              "Perfect for small teams — start using Fire Flow today and cut inspection time in half."
             </div>
             <button class="btn btn-ghost" style="width:100%;justify-content:center;padding:14px"
               onclick="window._navigate('/signup?plan=starter')">
@@ -145,7 +145,7 @@ export function renderPricing(container) {
               line-height:1.5;
               margin-bottom:20px;
             ">
-              💡 "All-in-one premium plan for busy companies — streamline inspections, approvals, and reporting across your whole organization."
+              "All-in-one premium plan for busy companies — streamline inspections, approvals, and reporting across your whole organization."
             </div>
             <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:1rem"
               onclick="window._navigate('/signup?plan=company')">

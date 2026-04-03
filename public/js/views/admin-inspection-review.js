@@ -229,14 +229,14 @@ function selectInspection(insp) {
           ${miniStat('Passed',           passCount,                      'var(--success)')}
           ${miniStat('❌ Failed',        failCount,                      'var(--danger)')}
           ${miniStat('⚠ Deficiencies',  insp.deficiencies.length,      'var(--warning)')}
-          ${miniStat('💵 Est. Repair',  totalCost > 0 ? '$' + totalCost.toLocaleString() : '—', 'var(--brand)')}
+          ${miniStat('Est. Repair',  totalCost > 0 ? '$' + totalCost.toLocaleString() : '—', 'var(--brand)')}
         </div>
       </div>
 
       <!-- Contact info (if available) -->
       ${insp.contact || insp.phone ? `
         <div class="card" style="padding:12px 16px">
-          <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">📞 Site Contact</div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:6px">Site Contact</div>
           <div style="font-size:.875rem;font-weight:600">${insp.contact || '—'}</div>
           ${insp.phone ? `<a href="tel:${insp.phone}" style="font-size:.82rem;color:var(--brand);margin-top:2px;display:block">${insp.phone}</a>` : ''}
         </div>
@@ -286,14 +286,14 @@ function selectInspection(insp) {
       <!-- Tech notes -->
       ${insp.notes ? `
         <div class="card">
-          <div class="section-title" style="margin-bottom:8px">📝 Technician Notes</div>
+          <div class="section-title" style="margin-bottom:8px">Technician Notes</div>
           <p style="font-size:.875rem;color:var(--text-subtle);line-height:1.6">${insp.notes}</p>
         </div>
       ` : ''}
 
       <!-- Actions -->
       <div class="flex-row" style="justify-content:flex-end;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-ghost" onclick="window._printReport('${insp.id}')">🖨 Print Report</button>
+        <button class="btn btn-ghost" onclick="window._printReport('${insp.id}')">Print Report</button>
         <button class="btn btn-ghost" onclick="window._requestChanges()">Request Changes</button>
         <button class="btn btn-danger btn-sm" onclick="window._flagInspection()">Flag Issue</button>
         <button class="btn btn-primary" onclick="window._generateQuote('${insp.id}')">

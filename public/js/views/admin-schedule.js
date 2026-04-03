@@ -67,7 +67,7 @@ export async function renderSchedule(container) {
     <!-- Unscheduled pool -->
     <div style="margin-bottom:16px">
       <div class="section-header">
-        <div class="section-title">📦 Unscheduled Jobs</div>
+        <div class="section-title">Unscheduled Jobs</div>
         <span class="badge badge-yellow" id="unscheduled-count">…</span>
       </div>
       <div id="unscheduled-pool" style="

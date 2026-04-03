@@ -201,7 +201,7 @@ function renderCancelled(sub) {
       margin-bottom:20px;
       text-align:center;
     ">
-      <div style="font-size:2.5rem;margin-bottom:12px">😔</div>
+      
       <h3 style="font-size:1.1rem;font-weight:800;margin:0 0 8px">Your subscription has ended</h3>
       <p style="font-size:.88rem;color:var(--text-muted);line-height:1.5;margin:0 0 24px">
         Your <strong>${oldPlan.name}</strong> plan has been cancelled.
@@ -254,7 +254,7 @@ function renderUnconfigured(sub) {
       padding:32px;
     ">
       <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:24px">
-        <div style="font-size:1.8rem;flex-shrink:0">💳</div>
+        
         <div>
           <h2 style="font-size:1.1rem;font-weight:800;margin:0 0 6px">Stripe billing not configured</h2>
           <p style="font-size:.88rem;color:var(--text-muted);line-height:1.5;margin:0">
@@ -403,7 +403,7 @@ function successBanner() {
       gap:12px;
       font-size:.9rem;
     ">
-      <span style="font-size:1.3rem">🎉</span>
+      
       <div>
         <strong>Subscription activated!</strong>
         <span style="color:var(--text-muted);margin-left:8px">Welcome to Fire Flow. Your account is ready.</span>

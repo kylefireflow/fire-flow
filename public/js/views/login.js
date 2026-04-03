@@ -26,7 +26,7 @@ export function renderLogin(container, onSuccess) {
         </div>
 
         <div id="login-dev-notice" class="login-dev-notice" style="display:none">
-          🛠 Dev mode — enter any email and password to log in
+          Dev mode — enter any email and password to log in
         </div>
         <div id="login-error" class="login-error" style="display:none"></div>
 
