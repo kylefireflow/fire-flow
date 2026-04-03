@@ -24,7 +24,8 @@ export function renderPricingConfig(container) {
       <button class="btn btn-primary" onclick="window._savePricingConfig()">Save Settings</button>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;max-width:100%">
+    <style>@media(min-width:700px){.pc-layout{grid-template-columns:1fr 340px!important}}</style>
+    <div class="pc-layout" style="display:grid;grid-template-columns:1fr;gap:20px;align-items:start;max-width:100%">
 
       <!-- Left: config form -->
       <div style="display:flex;flex-direction:column;gap:16px">
@@ -32,7 +33,7 @@ export function renderPricingConfig(container) {
         <!-- Labor & Materials -->
         <div class="card">
           <div class="section-title" style="margin-bottom:16px">Labor & Materials</div>
-          <div class="grid-2" style="gap:16px">
+          <div style="display:flex;flex-direction:column;gap:16px">
 
             <div class="form-group">
               <label class="form-label">Labor Rate (${esc(p.currency)}/hour) *</label>
@@ -60,7 +61,7 @@ export function renderPricingConfig(container) {
         <!-- Fees -->
         <div class="card">
           <div class="section-title" style="margin-bottom:16px">Service Fees</div>
-          <div class="grid-2" style="gap:16px">
+          <div style="display:flex;flex-direction:column;gap:16px">
 
             <div class="form-group">
               <label class="form-label">Minimum Service Fee (${esc(p.currency)}) *</label>
