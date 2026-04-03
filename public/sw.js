@@ -19,17 +19,21 @@ const SHELL_FILES = [
   '/js/auth.js',
   '/js/offline.js',
   '/js/toast.js',
+  // Core modules
+  '/js/quote-pdf.js',
+  '/js/pricing-config.js',
+  '/js/nfpa-checklists.js',
   // Admin views
   '/js/views/login.js',
   '/js/views/admin-dashboard.js',
-  '/js/views/admin-schedule.js',
   '/js/views/admin-pipeline.js',
   '/js/views/admin-inspection-review.js',
   '/js/views/admin-quote-builder.js',
+  '/js/views/admin-pricing-config.js',
   // Tech views
   '/js/views/tech-my-day.js',
   '/js/views/tech-inspection.js',
-  // Public / customer views (were missing — caused offline failure on these routes)
+  // Public / customer views
   '/js/views/customer-quote.js',
   '/js/views/signup.js',
   '/js/views/billing.js',
