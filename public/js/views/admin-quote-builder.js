@@ -8,6 +8,30 @@
  */
 
 import { api } from '../api.js';
+import { generateQuoteHTML, loadBranding, saveBranding } from '../quote-pdf.js';
+
+// Inline pricing helpers
+function loadPricing() {
+  try {
+    const d = { laborRate:95, materialMarkupPercent:20, minServiceFee:50, callOutFee:100, emergencyMultiplier:1.5 };
+    const raw = localStorage.getItem('ff_pricing');
+    return raw ? { ...d, ...JSON.parse(raw) } : d;
+  } catch { return { laborRate:95, materialMarkupPercent:20, minServiceFee:50, callOutFee:100, emergencyMultiplier:1.5 }; }
+}
+const _LABOR_MAP = {
+  'Missing Sprinkler Head':{ hours:1.5, materials:45 },'Corroded Sprinkler Head':{ hours:1.0, materials:35 },
+  'Painted Sprinkler Head':{ hours:1.0, materials:35 },'Main Valve Issue':{ hours:2.5, materials:120 },
+  'Pressure Out of Range':{ hours:1.5, materials:30 },'Missing Spare Heads/Wrench':{ hours:0.5, materials:75 },
+  'FDC Obstruction':{ hours:0.75, materials:0 },'PRV Out of Adjustment':{ hours:2.0, materials:50 },
+  'Pressure Failure':{ hours:2.5, materials:70 },'Device Failure':{ hours:2.0, materials:180 },
+  'Battery Failure':{ hours:1.0, materials:90 },'Trouble Signal Active':{ hours:1.5, materials:25 },
+  'Audibility Failure':{ hours:2.0, materials:60 },'No Inspection Tag':{ hours:0.25, materials:8 },
+  'Unauthorized Modification':{ hours:3.0, materials:120 },'_default':{ hours:1.0, materials:0 },
+};
+function calcItemPrice(type, p) {
+  const l = _LABOR_MAP[type] ?? _LABOR_MAP['_default'];
+  return Math.round(Math.max(p.minServiceFee,(l.hours*p.laborRate)+(l.materials*(1+p.materialMarkupPercent/100)))*100)/100;
+}
 
 // HTML-escape helper — keeps this module self-contained so it's safe even
 // before window._escapeHtml is set by app.js.
