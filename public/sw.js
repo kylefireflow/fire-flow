@@ -2,14 +2,14 @@
  * sw.js — Service Worker for offline caching
  * Caches app shell on install, serves from cache when offline.
  *
- * ⚠️  DEPLOYMENT NOTE: bump CACHE_NAME (e.g. fireflow-v6) every time you
+ * ⚠️  DEPLOYMENT NOTE: bump CACHE_NAME (e.g. fireflow-v7) every time you
  * deploy changes to any file in SHELL_FILES.  The activate handler deletes
  * all caches whose name doesn't match CACHE_NAME, which forces clients to
  * receive the new shell on their next load.  Forgetting to bump means users
  * with an active service worker may keep running stale JS/CSS.
  */
 
-const CACHE_NAME = 'fireflow-v6';
+const CACHE_NAME = 'fireflow-v7';
 const SHELL_FILES = [
   '/',
   '/index.html',
