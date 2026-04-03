@@ -236,10 +236,18 @@ function renderBody(insp) {
         </div>
       </div>
 
-      <!-- Right: summary -->
-      <div style="position:sticky;top:80px">
+      <!-- Right: summary + branding -->
+      <div style="position:sticky;top:80px;display:flex;flex-direction:column;gap:16px">
         <div class="card" id="quote-summary">
           ${renderQuoteSummary()}
+        </div>
+
+        <!-- Company Branding -->
+        <div class="card" style="padding:16px">
+          <div class="section-title" style="margin-bottom:12px">Company Branding</div>
+          <div id="branding-body" style="display:flex;flex-direction:column;gap:10px">
+            ${renderBrandingPanel()}
+          </div>
         </div>
 
         ${insp ? `
@@ -272,12 +280,110 @@ function renderBody(insp) {
 
   window._addLineItem      = addLineItem;
   window._addEmergencyItem = addEmergencyItem;
-  window._removeItem   = removeItem;
-  window._updateItem   = updateItem;
-  window._previewQuote = previewQuote;
+  window._removeItem       = removeItem;
+  window._updateItem       = updateItem;
+  window._previewQuote     = previewQuote;
   window._exportPDF        = exportPDF;
-  window._sendQuote    = sendQuote;
-  window._recalc       = recalc;
+  window._sendQuote        = sendQuote;
+  window._recalc           = recalc;
+  window._saveBrandingForm = saveBrandingForm;
+  window._handleLogoUpload = handleLogoUpload;
+}
+
+// ── Branding panel ────────────────────────────────────────────────────────────
+
+function renderBrandingPanel() {
+  const b = loadBranding();
+  const logoHtml = b.logoDataUrl
+    ? `<div style="margin-bottom:6px"><img src="${b.logoDataUrl}" style="max-height:48px;max-width:160px;object-fit:contain;border-radius:4px;border:1px solid var(--border)"></div>
+       <button class="btn btn-ghost btn-sm" style="font-size:.72rem;width:100%" onclick="window._handleLogoUpload(null)">Remove Logo</button>`
+    : '';
+  return `
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Company Name</label>
+      <input class="form-input" id="b-name" style="font-size:.82rem;padding:6px 10px"
+        placeholder="Acme Fire Protection" value="${esc(b.companyName)}">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Logo</label>
+      ${logoHtml}
+      <label style="display:block;cursor:pointer">
+        <div class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;font-size:.75rem">
+          ${b.logoDataUrl ? '↺ Replace Logo' : '⬆ Upload Logo'}
+        </div>
+        <input type="file" accept="image/*" style="display:none"
+          onchange="window._handleLogoUpload(this)">
+      </label>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Brand Color</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="color" id="b-color" value="${esc(b.primaryColor)}"
+          style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;padding:2px">
+        <input class="form-input" id="b-color-hex" style="font-size:.82rem;padding:6px 10px;flex:1"
+          value="${esc(b.primaryColor)}" placeholder="#f97316"
+          oninput="document.getElementById('b-color').value=this.value">
+      </div>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Phone</label>
+      <input class="form-input" id="b-phone" style="font-size:.82rem;padding:6px 10px"
+        placeholder="(555) 000-0000" value="${esc(b.contactPhone)}">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Email</label>
+      <input class="form-input" id="b-email" style="font-size:.82rem;padding:6px 10px"
+        placeholder="info@company.com" value="${esc(b.contactEmail)}">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Website</label>
+      <input class="form-input" id="b-website" style="font-size:.82rem;padding:6px 10px"
+        placeholder="www.company.com" value="${esc(b.contactWebsite)}">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label" style="font-size:.75rem">Footer Text</label>
+      <input class="form-input" id="b-footer" style="font-size:.82rem;padding:6px 10px"
+        value="${esc(b.footerText)}">
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:.82rem"
+      onclick="window._saveBrandingForm()">
+      Save Branding
+    </button>
+  `;
+}
+
+function saveBrandingForm() {
+  saveBranding({
+    companyName:    document.getElementById('b-name')?.value?.trim()    ?? '',
+    primaryColor:   document.getElementById('b-color')?.value           ?? '#f97316',
+    contactPhone:   document.getElementById('b-phone')?.value?.trim()   ?? '',
+    contactEmail:   document.getElementById('b-email')?.value?.trim()   ?? '',
+    contactWebsite: document.getElementById('b-website')?.value?.trim() ?? '',
+    footerText:     document.getElementById('b-footer')?.value?.trim()  ?? '',
+  });
+  window._notify?.success('Branding saved — will appear on all future quotes');
+}
+
+function handleLogoUpload(input) {
+  if (!input) {
+    saveBranding({ logoDataUrl: null });
+    document.getElementById('branding-body').innerHTML = renderBrandingPanel();
+    window._notify?.info('Logo removed');
+    return;
+  }
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 500 * 1024) {
+    window._notify?.error('Logo must be under 500 KB');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    saveBranding({ logoDataUrl: e.target.result });
+    document.getElementById('branding-body').innerHTML = renderBrandingPanel();
+    window._notify?.success('Logo saved');
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── Line items table ──────────────────────────────────────────────────────────
