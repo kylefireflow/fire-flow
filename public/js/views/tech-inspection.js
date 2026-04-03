@@ -18,6 +18,7 @@ import { notify } from '../toast.js';
 import { localInspections, localPhotos, syncQueue } from '../offline.js';
 import { getCompanyId, getCurrentUser } from '../auth.js';
 import { setInspectionInProgress } from '../app.js';
+import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
 
 const esc = window._escapeHtml ?? ((s) => String(s ?? ''));
 
@@ -326,8 +327,8 @@ function saveInfoStep() {
 
   // Load checkpoints for this system type (only if empty)
   if (draft.checkpoints.length === 0) {
-    const specific = CHECKPOINT_SETS[system_type] ?? DEFAULT_CHECKPOINTS;
-    draft.checkpoints = specific.map(cp => ({ ...cp, result: null }));
+    const specific = NFPA13_CHECKLISTS[system_type] ?? CHECKPOINT_SETS[system_type] ?? DEFAULT_CHECKPOINTS;
+    draft.checkpoints = specific.map(cp => ({ ...cp, result: null, value: '', notes: '' }));
   }
   return true;
 }
@@ -336,81 +337,121 @@ function saveInfoStep() {
 
 function renderCheckpointStep() {
   const cps       = draft.checkpoints;
+  const total     = cps.length;
+  const answered  = cps.filter(c => c.result !== null).length;
   const passCount = cps.filter(c => c.result === 'pass').length;
   const failCount = cps.filter(c => c.result === 'fail').length;
-  const remaining = cps.length - passCount - failCount;
+  const pct       = total > 0 ? Math.round((answered / total) * 100) : 0;
+
+  const cardRows = cps.map((cp, i) => {
+    const isNumeric = cp.type === 'numeric';
+    const isNotes   = cp.type === 'notes';
+    const isFail    = cp.result === 'fail';
+    const needNote  = isFail && !(cp.notes ?? '').trim();
+    const borderClr = cp.result === 'pass' ? 'rgba(34,197,94,.35)'
+                    : cp.result === 'fail' ? 'rgba(239,68,68,.35)'
+                    : 'var(--border)';
+    const passActive = cp.result === 'pass' ? 'active' : '';
+    const failActive = cp.result === 'fail' ? 'active' : '';
+
+    const buttons = isNotes
+      ? `<div onclick="window._setCheckpoint(${i},'pass')" title="Mark done" style="
+            flex-shrink:0;width:22px;height:22px;margin-top:2px;border-radius:50%;cursor:pointer;
+            background:${cp.result==='pass'?'var(--success)':'var(--border)'};
+            display:flex;align-items:center;justify-content:center">
+            ${cp.result==='pass'?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
+          </div>`
+      : `<div style="display:flex;gap:4px;flex-shrink:0">
+           <button class="check-btn pass ${passActive}" onclick="window._setCheckpoint(${i},'pass')" title="Pass" style="width:30px;height:30px;font-size:.68rem;font-weight:700">P</button>
+           <button class="check-btn fail ${failActive}" onclick="window._setCheckpoint(${i},'fail')" title="Fail" style="width:30px;height:30px;font-size:.68rem;font-weight:700">F</button>
+         </div>`;
+
+    const numericRow = isNumeric ? `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;background:var(--bg-raised);border-radius:var(--r-sm)">
+        <span style="font-size:.75rem;color:var(--text-muted);flex-shrink:0">Reading:</span>
+        <input type="number" step="any" class="form-input" style="height:32px;font-size:.85rem;width:110px;padding:0 8px"
+          value="${esc(cp.value ?? '')}" placeholder="0.0"
+          oninput="window._setCheckpointValue(${i},this.value)">
+        ${cp.unit ? `<span style="font-size:.78rem;color:var(--text-muted)">${esc(cp.unit)}</span>` : ''}
+      </div>` : '';
+
+    const failNoteRow = isFail ? `
+      <div style="margin-top:8px">
+        <textarea class="form-textarea" style="min-height:64px;font-size:.82rem;border-color:${needNote?'var(--danger)':'var(--border)'}"
+          placeholder="Required: describe what you found…"
+          oninput="window._setCheckpointNotes(${i},this.value)">${esc(cp.notes ?? '')}</textarea>
+        ${needNote?'<div style="font-size:.72rem;color:var(--danger);margin-top:3px">Fail note required before advancing</div>':''}
+      </div>` : '';
+
+    const notesRow = (isNotes && cp.result !== 'fail') ? `
+      <div style="margin-top:8px">
+        <textarea class="form-textarea" style="min-height:56px;font-size:.82rem"
+          placeholder="${esc(cp.description || 'Enter observation…')}"
+          oninput="window._setCheckpointNotes(${i},this.value)">${esc(cp.notes ?? '')}</textarea>
+      </div>` : '';
+
+    return `
+      <div class="card" id="cp-row-${i}" style="padding:14px 16px;border-color:${borderClr};transition:border-color .2s">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          ${buttons}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.875rem;font-weight:600;line-height:1.35">
+              ${esc(cp.label)}${cp.required ? '<span style="color:var(--danger);margin-left:3px">*</span>' : ''}
+            </div>
+            ${cp.description ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:2px;line-height:1.4">${esc(cp.description)}</div>` : ''}
+            <div style="font-size:.68rem;color:var(--text-muted);margin-top:3px;font-family:monospace">${esc(cp.nfpa ?? '')} &nbsp;·&nbsp; ${esc(cp.code)}</div>
+          </div>
+        </div>
+        ${numericRow}${failNoteRow}${notesRow}
+      </div>`;
+  }).join('');
 
   return `
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <!-- BUG 2 FIX: explicit IDs for live counter -->
-      <div class="card card-sm" style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:0;padding:0;overflow:hidden">
-        <div style="padding:12px;border-right:1px solid var(--border)">
-          <div id="cp-pass-count" style="font-size:1.3rem;font-weight:800;color:var(--success)">${passCount}</div>
-          <div style="font-size:.72rem;color:var(--text-muted)">Passed</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+
+      <!-- Progress header -->
+      <div class="card card-sm" style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span id="cp-remaining-count" style="font-size:.8rem;font-weight:600;color:var(--text-muted)">${answered} of ${total} answered</span>
+          <div style="display:flex;gap:14px;font-size:.78rem">
+            <span id="cp-pass-count" style="color:var(--success);font-weight:700">${passCount} passed</span>
+            <span id="cp-fail-count" style="color:var(--danger);font-weight:700">${failCount} failed</span>
+          </div>
         </div>
-        <div style="padding:12px;border-right:1px solid var(--border)">
-          <div id="cp-fail-count" style="font-size:1.3rem;font-weight:800;color:var(--danger)">${failCount}</div>
-          <div style="font-size:.72rem;color:var(--text-muted)">Failed</div>
-        </div>
-        <div style="padding:12px">
-          <div id="cp-remaining-count" style="font-size:1.3rem;font-weight:800;color:var(--text-muted)">${remaining}</div>
-          <div style="font-size:.72rem;color:var(--text-muted)">Remaining</div>
+        <div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden">
+          <div id="cp-progress-bar" style="height:100%;width:${pct}%;background:${pct===100?'var(--success)':'var(--brand)'};border-radius:99px;transition:width .3s ease"></div>
         </div>
       </div>
 
-      <div class="flex-row" style="justify-content:flex-end">
-        <!-- BUG 17 FIX: passAll confirmation via global handler -->
-        <button class="btn btn-ghost btn-sm" onclick="window._passAll()">✓ Pass All</button>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="window._passAll()">Pass All</button>
       </div>
 
-      <!-- FIELD FIX: hint that tapping the row = pass -->
-      <div style="font-size:.75rem;color:var(--text-muted);padding:4px 14px 8px">
-        Tap row to PASS · tap ✕ to FAIL
-      </div>
-
-      <div class="card" style="padding:8px">
-        <div class="checklist">
-          ${cps.map((cp, i) => `
-            <!-- FIELD FIX: tapping anywhere on the row = pass (most items pass).
-                 Explicit ✕ button still required to mark fail. -->
-            <div class="check-item ${cp.result ?? ''}" id="cp-row-${i}"
-              onclick="window._rowTapCheckpoint(${i})">
-              <div class="check-toggle" onclick="event.stopPropagation()">
-                <button class="check-btn pass ${cp.result === 'pass' ? 'active' : ''}"
-                  onclick="window._setCheckpoint(${i}, 'pass')" title="Pass">✓</button>
-                <button class="check-btn fail ${cp.result === 'fail' ? 'active' : ''}"
-                  onclick="window._setCheckpoint(${i}, 'fail')" title="Fail">✕</button>
-              </div>
-              <div class="check-label">
-                ${esc(cp.label)}
-                <div style="font-size:.7rem;color:var(--text-muted);margin-top:1px">${esc(cp.nfpa ?? '')}</div>
-              </div>
-              <div class="check-code">${esc(cp.code)}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
+      ${cardRows}
 
       <div id="fail-count-banner"
         style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:var(--r-md);padding:12px;font-size:.82rem;color:var(--danger);${failCount === 0 ? 'display:none' : ''}">
-        ⚠ ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed — you'll capture deficiency details in the next step.
+        ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed — add notes, then capture details in the next step.
       </div>
     </div>
   `;
 }
 
-// BUG 2 FIX: update counters via ID, not brittle style selector
 function updateCheckpointCounters() {
   const cps       = draft.checkpoints;
+  const total     = cps.length;
   const passCount = cps.filter(c => c.result === 'pass').length;
   const failCount = cps.filter(c => c.result === 'fail').length;
-  const remaining = cps.length - passCount - failCount;
-  const pc = document.getElementById('cp-pass-count');
-  const fc = document.getElementById('cp-fail-count');
-  const rc = document.getElementById('cp-remaining-count');
-  if (pc) pc.textContent = passCount;
-  if (fc) fc.textContent = failCount;
-  if (rc) rc.textContent = remaining;
+  const answered  = cps.filter(c => c.result !== null).length;
+  const pct       = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const pc  = document.getElementById('cp-pass-count');
+  const fc  = document.getElementById('cp-fail-count');
+  const rc  = document.getElementById('cp-remaining-count');
+  const bar = document.getElementById('cp-progress-bar');
+  if (pc)  pc.textContent  = passCount + ' passed';
+  if (fc)  fc.textContent  = failCount + ' failed';
+  if (rc)  rc.textContent  = answered + ' of ' + total + ' answered';
+  if (bar) { bar.style.width = pct + '%'; bar.style.background = pct === 100 ? 'var(--success)' : 'var(--brand)'; }
 }
 
 // ── Step 3: Deficiencies ──────────────────────────────────────────────────────
@@ -676,6 +717,21 @@ function bindStepEvents(container) {
     const stepId = STEPS[currentStep].id;
     if (stepId === 'info' && !saveInfoStep()) return;
 
+    // NFPA validation: on checkpoints step, require all required items answered + fail notes
+    if (STEPS[currentStep].id === 'checkpoints') {
+      const cps = draft.checkpoints;
+      const missingRequired = cps.filter(c => c.required && c.result === null);
+      if (missingRequired.length > 0) {
+        notify.error(missingRequired.length + ' required checkpoint' + (missingRequired.length > 1 ? 's' : '') + ' not yet marked.');
+        return;
+      }
+      const failNoNote = cps.filter(c => c.result === 'fail' && !(c.notes ?? '').trim());
+      if (failNoNote.length > 0) {
+        notify.error('Add fail notes for ' + failNoNote.length + ' failed checkpoint' + (failNoNote.length > 1 ? 's' : '') + ' before continuing.');
+        return;
+      }
+    }
+
     if (currentStep < STEPS.length - 1) {
       currentStep++;
       // BUG FIX: push history entry so browser Back comes back to this step
@@ -753,6 +809,24 @@ function bindStepEvents(container) {
       });
     }
     updateCheckpointCounters();
+  };
+
+  window._setCheckpointValue = (i, val) => {
+    draft.checkpoints[i].value = val;
+  };
+
+  window._setCheckpointNotes = (i, val) => {
+    draft.checkpoints[i].notes = val;
+    // Remove red border on note row once user starts typing
+    const row = document.getElementById('cp-row-' + i);
+    if (row) {
+      const ta = row.querySelector('textarea');
+      if (ta && val.trim()) {
+        ta.style.borderColor = 'var(--border)';
+        const hint = ta.nextElementSibling;
+        if (hint && hint.style && hint.tagName === 'DIV') hint.style.display = 'none';
+      }
+    }
   };
 
   // BUG 17 FIX: passAll with confirmation, uses module-scope notify directly
