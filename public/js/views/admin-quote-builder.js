@@ -267,7 +267,8 @@ function renderBody(insp) {
   window._addEmergencyItem = addEmergencyItem;
   window._removeItem   = removeItem;
   window._updateItem   = updateItem;
-  window._previewQuote = () => window._notify?.info('PDF preview coming soon');
+  window._previewQuote = previewQuote;
+  window._exportPDF        = exportPDF;
   window._sendQuote    = sendQuote;
   window._recalc       = recalc;
 }
@@ -553,4 +554,86 @@ function validUntilDate() {
   const d = new Date();
   d.setDate(d.getDate() + 30);
   return d.toISOString().split('T')[0];
+}
+
+// ── Quote data collector ──────────────────────────────────────────────────────
+
+function collectQuoteData() {
+  const subtotal = quoteItems.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+  const tax      = subtotal * TAX_RATE;
+  const total    = subtotal + tax;
+  return {
+    address:     document.getElementById('q-address')?.value?.trim()    ?? '',
+    contact:     document.getElementById('q-contact')?.value?.trim()    ?? '',
+    email:       document.getElementById('q-email')?.value?.trim()      ?? '',
+    validUntil:  document.getElementById('q-valid-until')?.value        ?? '',
+    notes:       document.getElementById('q-notes')?.value?.trim()      ?? '',
+    lineItems:   quoteItems,
+    subtotal,
+    tax,
+    total,
+    taxRate:     TAX_RATE,
+    quoteNumber: sourceInspection?.id?.slice(-6)?.toUpperCase() ?? '',
+  };
+}
+
+// ── Branding collector (reads live form values, falls back to saved) ──────────
+
+function collectCurrentBranding() {
+  const saved = loadBranding();
+  return {
+    ...saved,
+    companyName:    document.getElementById('b-name')?.value?.trim()    ?? saved.companyName,
+    primaryColor:   document.getElementById('b-color')?.value           ?? saved.primaryColor,
+    contactPhone:   document.getElementById('b-phone')?.value?.trim()   ?? saved.contactPhone,
+    contactEmail:   document.getElementById('b-email')?.value?.trim()   ?? saved.contactEmail,
+    contactWebsite: document.getElementById('b-website')?.value?.trim() ?? saved.contactWebsite,
+    footerText:     document.getElementById('b-footer')?.value?.trim()  ?? saved.footerText,
+  };
+}
+
+// ── PDF Preview (full-screen iframe modal) ────────────────────────────────────
+
+function previewQuote() {
+  const html = generateQuoteHTML(collectQuoteData(), collectCurrentBranding());
+  document.getElementById('pdf-preview-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'pdf-preview-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;background:#1a1a2e';
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0f172a;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0">
+      <div style="flex:1">
+        <span style="color:#fff;font-weight:700;font-size:.95rem">PDF Preview</span>
+        <span style="color:#64748b;font-size:.78rem;margin-left:8px">Exactly what will be sent</span>
+      </div>
+      <button onclick="window._exportPDF()" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:.82rem;font-weight:700;cursor:pointer">&#11015; Download PDF</button>
+      <button onclick="window._sendQuote()" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:.82rem;font-weight:700;cursor:pointer">&#9993; Send to Customer</button>
+      <button onclick="document.getElementById('pdf-preview-modal').remove()" style="background:rgba(255,255,255,.08);color:#94a3b8;border:none;border-radius:8px;padding:7px 12px;font-size:.82rem;cursor:pointer">&#10005; Close</button>
+    </div>
+    <div style="flex:1;overflow:auto;display:flex;justify-content:center;padding:28px 20px;background:#334155">
+      <div style="width:100%;max-width:820px;background:#fff;border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;min-height:1060px">
+        <iframe id="pdf-preview-iframe" style="width:100%;height:100%;min-height:1060px;border:none;display:block" title="Quote PDF Preview"></iframe>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('pdf-preview-iframe').srcdoc = html;
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', onKey); }
+  };
+  document.addEventListener('keydown', onKey);
+}
+
+// ── PDF Export (opens print dialog in new tab) ────────────────────────────────
+
+function exportPDF() {
+  const html = generateQuoteHTML(collectQuoteData(), collectCurrentBranding());
+  const win  = window.open('', '_blank', 'width=900,height=700');
+  if (!win) { window._notify?.error('Pop-up blocked — allow pop-ups to export PDF'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
 }
