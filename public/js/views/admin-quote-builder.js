@@ -21,7 +21,6 @@ function esc(s) {
 }
 
 const TAX_RATE    = 0.08;
-const SERVICE_FEE = 125;  // base service call, always included
 
 let quoteItems     = [];
 let quoteNotes     = 'Prices are estimates and may vary based on field conditions. Final invoice will reflect actual materials used.';
@@ -103,40 +102,43 @@ async function loadAndBuildQuote(sourceId) {
 }
 
 function defaultLineItems() {
+  const p = loadPricing();
   return [
-    { id: 'li_svc', description: 'Service Call Fee', qty: 1, unitPrice: SERVICE_FEE, category: 'labor', locked: true },
-    { id: 'li_1',   description: 'Inspection Labor',  qty: 1, unitPrice: 0,           category: 'labor', locked: false },
+    buildCallOutLineItem(p),
+    { id: 'li_1', description: 'Inspection Labor', qty: 1, unitPrice: p.laborRate, category: 'labor', locked: false },
   ];
 }
 
 function buildLineItems(insp) {
-  const items = [
-    { id: 'li_svc', description: 'Service Call Fee', qty: 1, unitPrice: SERVICE_FEE, category: 'labor', locked: true },
-  ];
-
-  const defs = insp.deficiencies ?? [];
+  const p     = loadPricing();
+  const items = [ buildCallOutLineItem(p) ];
+  const defs  = insp.deficiencies ?? [];
 
   defs.forEach((d, i) => {
-    const estimatedCost = d.estimatedCost ? +d.estimatedCost : 0;
+    // Auto-price from deficiency type using company pricing framework
+    const autoPrice = calculateLineItemPrice(d.type ?? '', p, false);
+    // If technician already entered a cost, prefer that; otherwise use auto-price
+    const manualCost = d.estimatedCost ? +d.estimatedCost : 0;
+    const unitPrice  = manualCost > 0 ? manualCost : autoPrice;
+
     const desc = d.description
       ? d.description.slice(0, 80) + (d.description.length > 80 ? '…' : '')
       : (d.type || 'Deficiency repair');
 
-    // Labor item from the deficiency
     items.push({
       id:          `li_def_${i}`,
       description: desc,
       qty:         1,
-      unitPrice:   estimatedCost > 0 ? estimatedCost : 0,
-      category:    'labor',
+      unitPrice,
+      category:    d.severity === 'critical' ? 'labor' : 'labor',
       locked:      false,
       _defCode:    d.code ?? d.checkpointCode ?? '',
+      _autoPriced: manualCost === 0,  // flag: price came from pricing framework
     });
   });
 
   if (items.length === 1) {
-    // No deficiencies — add a placeholder labor line
-    items.push({ id: 'li_labor', description: 'Inspection labor', qty: 1, unitPrice: 0, category: 'labor', locked: false });
+    items.push({ id: 'li_labor', description: 'Inspection labor', qty: 1, unitPrice: p.laborRate, category: 'labor', locked: false });
   }
 
   return items;
