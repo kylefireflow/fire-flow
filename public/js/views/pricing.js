@@ -218,7 +218,6 @@ function companyFeatures() {
     { text: 'Everything in Starter' },
     { text: 'Quote generation & customer approval workflow', highlight: true },
     { text: 'Advanced kanban job pipeline' },
-    { text: 'Multi-tech schedule board' },
     { text: 'Priority support + onboarding call', highlight: true },
     { text: 'Optional custom integrations' },
   ];

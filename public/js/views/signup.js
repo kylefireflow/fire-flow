@@ -48,7 +48,6 @@ const PLANS = {
       'Everything in Starter',
       'Quote builder + customer approval flow',
       'Advanced kanban job pipeline',
-      'Multi-tech schedule board',
       'Priority support + onboarding call',
     ],
     brand: true,

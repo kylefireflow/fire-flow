@@ -229,7 +229,7 @@ function getCardActions(job, stageId) {
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();window._rejectJobQuote('${job.id}')">Reject</button>
       `;
     case 'approved':
-      return `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation()">Assign & Schedule</button>`;
+      return `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation()">Assign</button>`;
     default:
       return '';
   }

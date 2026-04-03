@@ -10,7 +10,6 @@ import { notify } from './toast.js';
 import { renderLogin }              from './views/login.js';
 import { renderPricing }            from './views/pricing.js';
 import { renderAdminDashboard }     from './views/admin-dashboard.js';
-import { renderSchedule }           from './views/admin-schedule.js';
 import { renderPipeline }           from './views/admin-pipeline.js';
 import { renderInspectionReview }   from './views/admin-inspection-review.js';
 import { renderQuoteBuilder }       from './views/admin-quote-builder.js';
@@ -34,7 +33,6 @@ const publicRoutes = {
 const routes = {
   '/':                  { view: renderAdminDashboard,   roles: ['admin'] },
   '/dashboard':         { view: renderAdminDashboard,   roles: ['admin'] },
-  '/schedule':          { view: renderSchedule,         roles: ['admin'] },
   '/pipeline':          { view: renderPipeline,         roles: ['admin'] },
   '/inspections':       { view: renderInspectionReview, roles: ['admin'] },
   '/quotes':            { view: renderQuoteBuilder,     roles: ['admin'] },
@@ -181,7 +179,6 @@ const _flameSvg = (size = 20) =>
 
 const _ico = {
   dashboard:   `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
-  schedule:    `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
   pipeline:    `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="4" height="18" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="5" width="4" height="16" rx="1"/></svg>`,
   inspections: `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>`,
   quotes:      `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
@@ -200,7 +197,6 @@ function renderShell(role) {
 
   const adminNav = [
     { path: '/dashboard',   label: 'Dashboard',   icon: _ico.dashboard   },
-    { path: '/schedule',    label: 'Schedule',    icon: _ico.schedule    },
     { path: '/pipeline',    label: 'Pipeline',    icon: _ico.pipeline    },
     { path: '/inspections', label: 'Inspections', icon: _ico.inspections },
     { path: '/quotes',      label: 'Quotes',      icon: _ico.quotes      },
@@ -230,7 +226,6 @@ function renderShell(role) {
   const mobileNavItems = role === 'admin'
     ? [
         { path: '/dashboard',   label: 'Home',    icon: _ico.dashboard   },
-        { path: '/schedule',    label: 'Schedule',icon: _ico.schedule    },
         { path: '/pipeline',    label: 'Pipeline',icon: _ico.pipeline    },
         { path: '/inspections', label: 'Reports', icon: _ico.inspections },
       ]

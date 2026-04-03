@@ -13,7 +13,6 @@ export async function renderAdminDashboard(container) {
         <div class="page-subtitle">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       </div>
       <div class="flex-row">
-        <button class="btn btn-ghost btn-sm" onclick="window._navigate('/schedule')">${_ico.cal} Schedule</button>
         <button class="btn btn-primary" onclick="window._navigate('/inspection/new')">${_ico.plus} New Inspection</button>
       </div>
     </div>
