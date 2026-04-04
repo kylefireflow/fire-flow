@@ -20,8 +20,21 @@ import { getCurrentUser } from '../auth.js';
 // ─── Plan constants (mirrors server/pricing page) ─────────────────────────────
 
 const PLANS = {
-  starter: { name: 'Small Team',  badge: 'Starter', price: '$200', desc: '1–3 technicians',      color: 'var(--success)' },
-  company: { name: 'Full Plan',   badge: 'Company',  price: '$550', desc: '4+ technicians',        color: 'var(--brand)'   },
+  starter: {
+    name: 'Starter', badge: 'Starter', price: '$149', color: 'var(--success)',
+    invoices: 50, overage: 2.00,
+    desc: '50 invoices/month included · $2.00 per extra',
+  },
+  growth: {
+    name: 'Growth', badge: 'Growth', price: '$249', color: 'var(--brand)',
+    invoices: 120, overage: 1.50,
+    desc: '120 invoices/month included · $1.50 per extra',
+  },
+  pro: {
+    name: 'Pro', badge: 'Pro', price: '$399', color: '#a855f7',
+    invoices: 300, overage: 1.00,
+    desc: '300 invoices/month included · $1.00 per extra',
+  },
 };
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -152,7 +165,7 @@ function renderActive(sub) {
       </div>` : ''}
 
     <!-- Upgrade / switch plan section -->
-    ${sub.plan !== 'company' ? upgradeCta() : ''}
+    ${sub.plan !== 'pro' ? upgradeCta(sub.plan) : ''}
 
     <!-- What's included -->
     ${includedFeatures(sub.plan)}
@@ -234,9 +247,10 @@ function renderInactive(sub) {
         Billed monthly — cancel any time.
       </p>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
         ${planPickerCard('starter')}
-        ${planPickerCard('company')}
+        ${planPickerCard('growth')}
+        ${planPickerCard('pro')}
       </div>
     </div>
 
@@ -296,36 +310,44 @@ function renderUnconfigured(sub) {
 
 function planPickerCard(planId) {
   const p = PLANS[planId];
+  const isPopular = planId === 'growth';
   return `
     <div style="
-      border:1px solid var(--border);
+      border:1px solid ${isPopular ? p.color : 'var(--border)'};
       border-radius:var(--r-lg);
       padding:20px;
       display:flex;
       flex-direction:column;
       gap:12px;
+      position:relative;
+      ${isPopular ? 'box-shadow:0 0 0 1px ' + p.color + '33' : ''}
     ">
+      ${isPopular ? `<div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:${p.color};color:#fff;font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:99px;white-space:nowrap">MOST POPULAR</div>` : ''}
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span style="font-size:1rem;font-weight:700">${p.name}</span>
-          <span class="badge ${planId === 'company' ? 'badge-orange' : 'badge-blue'}" style="font-size:.68rem">${p.badge}</span>
         </div>
-        <div style="font-size:.82rem;color:var(--text-muted)">${p.desc}</div>
+        <div style="font-size:1.8rem;font-weight:900;color:${p.color};line-height:1;margin-bottom:4px">
+          ${p.price}<span style="font-size:.8rem;font-weight:400;color:var(--text-muted)">/mo</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);line-height:1.5">
+          <div>✓ ${p.invoices} invoices/month included</div>
+          <div>+ $${p.overage.toFixed(2)} per extra invoice</div>
+          <div style="margin-top:4px">✓ All features included</div>
+        </div>
       </div>
-      <div style="font-size:1.6rem;font-weight:900;color:${p.color};line-height:1">
-        ${p.price}<span style="font-size:.8rem;font-weight:400;color:var(--text-muted)">/month</span>
-      </div>
-      <button class="btn ${planId === 'company' ? 'btn-primary' : 'btn-ghost'} plan-btn"
+      <button class="btn ${isPopular ? 'btn-primary' : 'btn-ghost'} plan-btn"
         data-plan="${planId}"
         style="justify-content:center;margin-top:auto">
-        Activate ${p.name} →
+        Start with ${p.name} →
       </button>
     </div>
   `;
 }
 
-function upgradeCta() {
-  const p = PLANS.company;
+function upgradeCta(currentPlan) {
+  const nextPlan = currentPlan === 'starter' ? 'growth' : 'pro';
+  const p = PLANS[nextPlan];
   return `
     <div style="
       background:rgba(249,115,22,.05);
@@ -341,13 +363,13 @@ function upgradeCta() {
     ">
       <div>
         <div style="font-size:.88rem;font-weight:700;margin-bottom:4px">
-          Upgrade to Full Plan
+          Upgrade to ${p.name}
         </div>
         <div style="font-size:.8rem;color:var(--text-muted)">
-          Unlock quote builder, customer approval workflow, kanban pipeline, and unlimited technicians.
+          ${p.invoices} invoices/month included · $${p.overage.toFixed(2)} per extra · all features included.
         </div>
       </div>
-      <button class="btn btn-primary btn-sm plan-btn" data-plan="company" style="flex-shrink:0">
+      <button class="btn btn-primary btn-sm plan-btn" data-plan="${nextPlan}" style="flex-shrink:0">
         Upgrade to ${p.price}/mo →
       </button>
     </div>
@@ -355,9 +377,7 @@ function upgradeCta() {
 }
 
 function includedFeatures(planId) {
-  const features = planId === 'company'
-    ? ['Unlimited technicians', 'Quote builder + customer approval', 'Kanban job pipeline', 'Priority support', 'PDF inspection reports', 'Offline mode']
-    : ['Up to 3 technicians', 'Guided inspection wizard', 'Deficiency capture + photos', 'Offline mode', 'Admin scheduling dashboard', 'PDF inspection reports'];
+  const features = ['Unlimited technicians', 'Guided inspection wizard', 'Deficiency capture', 'Quote builder + PDF', 'Customer approval workflow', 'Kanban job pipeline', 'Pricing framework', 'Offline mode'];
 
   return `
     <div style="

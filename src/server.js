@@ -218,7 +218,7 @@ function handleGetSubscription(req, res, user) {
       company_id,
       dev_mode:    true,
       message:     'Stripe is not configured. Set STRIPE_SECRET_KEY, STRIPE_STARTER_PRICE_ID, and STRIPE_COMPANY_PRICE_ID to enable billing.',
-      env_vars:    ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_STARTER_PRICE_ID', 'STRIPE_COMPANY_PRICE_ID'],
+      env_vars:    ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_STARTER_PRICE_ID', 'STRIPE_GROWTH_PRICE_ID', 'STRIPE_PRO_PRICE_ID'],
     }});
   }
 

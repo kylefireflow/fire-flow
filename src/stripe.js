@@ -31,15 +31,15 @@ const STRIPE_API_BASE       = 'https://api.stripe.com/v1';
 // Price IDs come from the Stripe Dashboard → Products
 const PRICE_IDS = {
   starter: process.env.STRIPE_STARTER_PRICE_ID ?? '',
-  company: process.env.STRIPE_COMPANY_PRICE_ID ?? '',
+  growth:  process.env.STRIPE_GROWTH_PRICE_ID  ?? '',
+  pro:     process.env.STRIPE_PRO_PRICE_ID     ?? '',
 };
 
 export function isStripeConfigured() {
   return !!(
     STRIPE_SECRET_KEY &&
     STRIPE_SECRET_KEY.startsWith('sk_') &&
-    PRICE_IDS.starter &&
-    PRICE_IDS.company
+    PRICE_IDS.starter
   );
 }
 
@@ -248,12 +248,14 @@ export async function getSubscription(subscriptionId) {
 // ─── Plan helpers ─────────────────────────────────────────────────────────────
 
 export const PLAN_DETAILS = {
-  starter: { name: 'Small Team', price: '$200', priceNum: 200 },
-  company: { name: 'Full Plan',  price: '$550', priceNum: 550 },
+  starter: { name: 'Starter', price: '$149', priceNum: 149, invoices: 50,  overage: 2.00 },
+  growth:  { name: 'Growth',  price: '$249', priceNum: 249, invoices: 120, overage: 1.50 },
+  pro:     { name: 'Pro',     price: '$399', priceNum: 399, invoices: 300, overage: 1.00 },
 };
 
 export function planFromPriceId(priceId) {
-  if (priceId === PRICE_IDS.company)  return 'company';
+  if (priceId === PRICE_IDS.pro)      return 'pro';
+  if (priceId === PRICE_IDS.growth)   return 'growth';
   if (priceId === PRICE_IDS.starter)  return 'starter';
   return 'starter';
 }
