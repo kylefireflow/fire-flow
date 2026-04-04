@@ -207,7 +207,7 @@ function getIp(req) {
 
 // GET /v1/billing/subscription
 function handleGetSubscription(req, res, user) {
-  const company_id = user?.company_id ?? null;
+  const company_id = user?.company_id ?? user?.sub ?? null;
   if (!company_id) {
     return send(res, 400, { success: false, error: { code: 'NO_COMPANY', message: 'User has no company_id.' } });
   }
@@ -248,7 +248,7 @@ async function handleCreateCheckout(req, res, user) {
   if (body === null) return;
 
   const { plan, company_name } = body;
-  const company_id     = user?.company_id ?? null;
+  const company_id     = user?.company_id ?? user?.sub ?? null;
   const customer_email = user?.email ?? null;
 
   if (!company_id) {
@@ -291,7 +291,7 @@ async function handleCreatePortal(req, res, user) {
     }});
   }
 
-  const company_id = user?.company_id ?? null;
+  const company_id = user?.company_id ?? user?.sub ?? null;
   if (!company_id) {
     return send(res, 400, { success: false, error: { code: 'NO_COMPANY', message: 'User has no company_id.' } });
   }
