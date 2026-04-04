@@ -24,8 +24,7 @@ export function renderPricingConfig(container) {
       <button class="btn btn-primary" onclick="window._savePricingConfig()">Save Settings</button>
     </div>
 
-    <style>@media(min-width:700px){.pc-layout{grid-template-columns:1fr 340px!important}}</style>
-    <div class="pc-layout" style="display:grid;grid-template-columns:1fr;gap:20px;align-items:start;max-width:100%">
+    <div style="display:flex;flex-direction:column;gap:20px;max-width:100%;overflow:hidden">
 
       <!-- Left: config form -->
       <div style="display:flex;flex-direction:column;gap:16px">
@@ -124,7 +123,7 @@ export function renderPricingConfig(container) {
       </div>
 
       <!-- Right: live preview + audit -->
-      <div style="display:flex;flex-direction:column;gap:12px;position:sticky;top:80px">
+      <div style="display:flex;flex-direction:column;gap:12px">
 
         <!-- Live sample prices -->
         <div class="card" style="padding:16px">
