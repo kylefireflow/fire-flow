@@ -68,9 +68,13 @@ export async function renderBilling(container) {
   `;
 
   try {
-    const res = await api.getSubscription();
-    const sub = res.data ?? {};
-    renderBillingBody(document.getElementById('billing-body'), sub);
+    const [subRes, usageRes] = await Promise.allSettled([
+      api.getSubscription(),
+      api.getUsage(),
+    ]);
+    const sub   = subRes.status === 'fulfilled'   ? (subRes.value.data   ?? {}) : {};
+    const usage = usageRes.status === 'fulfilled' ? (usageRes.value.data ?? {}) : null;
+    renderBillingBody(document.getElementById('billing-body'), sub, usage);
   } catch (err) {
     document.getElementById('billing-body').innerHTML = errorState(err.message);
   }
@@ -78,7 +82,7 @@ export async function renderBilling(container) {
 
 // ─── Render billing body based on subscription state ─────────────────────────
 
-function renderBillingBody(el, sub) {
+function renderBillingBody(el, sub, usage) {
   if (sub.dev_mode || sub.status === 'unconfigured') {
     el.innerHTML = renderUnconfigured(sub);
     return;
@@ -89,7 +93,7 @@ function renderBillingBody(el, sub) {
   switch (status) {
     case 'active':
     case 'trialing':
-      el.innerHTML = renderActive(sub);
+      el.innerHTML = renderActive(sub, usage);
       break;
     case 'past_due':
       el.innerHTML = renderPastDue(sub);
@@ -110,7 +114,7 @@ function renderBillingBody(el, sub) {
 
 // ─── State renders ────────────────────────────────────────────────────────────
 
-function renderActive(sub) {
+function renderActive(sub, usage) {
   const plan   = PLANS[sub.plan] ?? PLANS.starter;
   const period = sub.current_period_end
     ? new Date(sub.current_period_end).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -163,6 +167,9 @@ function renderActive(sub) {
         ⚠ Your subscription is set to cancel on ${period}.
         You'll retain access until then. To reactivate, click "Manage billing" above.
       </div>` : ''}
+
+    <!-- Usage meter -->
+    ${usage ? usageMeter(usage) : ''}
 
     <!-- Upgrade / switch plan section -->
     ${sub.plan !== 'pro' ? upgradeCta(sub.plan) : ''}
@@ -222,10 +229,10 @@ function renderCancelled(sub) {
       </p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
         <button class="btn btn-primary plan-btn" data-plan="starter">
-          Restart with Small Team ($200/mo) →
+          Restart with Starter ($149/mo) →
         </button>
-        <button class="btn btn-ghost plan-btn" data-plan="company">
-          Or go Full Plan ($550/mo)
+        <button class="btn btn-ghost plan-btn" data-plan="growth">
+          Or go Growth ($249/mo)
         </button>
       </div>
     </div>
@@ -341,6 +348,48 @@ function planPickerCard(planId) {
         style="justify-content:center;margin-top:auto">
         Start with ${p.name} →
       </button>
+    </div>
+  `;
+}
+
+function usageMeter(usage) {
+  const { used = 0, included = 50, overage = 0, overage_rate = 2.00, plan = 'starter' } = usage;
+  const pct       = Math.min(100, Math.round((used / included) * 100));
+  const isOver    = overage > 0;
+  const barColor  = isOver ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+  const overageAmt = (overage * overage_rate).toFixed(2);
+
+  return `
+    <div style="
+      background:var(--bg-surface);
+      border:1px solid ${isOver ? 'rgba(239,68,68,.3)' : 'var(--border)'};
+      border-radius:var(--r-xl);
+      padding:24px 28px;
+      margin-bottom:20px;
+    ">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">
+          Quote usage this month
+        </div>
+        <div style="font-size:.85rem;font-weight:700;color:${isOver ? 'var(--danger)' : 'var(--text-subtle)'}">
+          ${used} / ${included} included
+          ${isOver ? `<span style="margin-left:8px;color:var(--danger)">+${overage} over ($${overageAmt} will be billed)</span>` : ''}
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div style="background:var(--bg-raised);border-radius:99px;height:8px;overflow:hidden;margin-bottom:10px">
+        <div style="width:${pct}%;height:100%;background:${barColor};border-radius:99px;transition:width .4s"></div>
+      </div>
+
+      <div style="font-size:.78rem;color:var(--text-muted);line-height:1.6">
+        ${isOver
+          ? `You've used ${overage} extra quote${overage !== 1 ? 's' : ''} at $${overage_rate.toFixed(2)} each — <strong style="color:var(--danger)">$${overageAmt}</strong> will be added to your next invoice.`
+          : pct >= 80
+            ? `You've used ${pct}% of your monthly quota. Extra quotes are $${overage_rate.toFixed(2)} each.`
+            : `Extra quotes beyond ${included}/month are billed at $${overage_rate.toFixed(2)} each.`
+        }
+      </div>
     </div>
   `;
 }

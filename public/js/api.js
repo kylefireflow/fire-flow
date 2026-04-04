@@ -87,6 +87,7 @@ export const api = {
 
   // Billing
   getSubscription:   ()            => request('GET', '/v1/billing/subscription'),
+  getUsage:          ()            => request('GET', '/v1/billing/usage'),
   createCheckout:    (body)        => request('POST', '/v1/billing/checkout', body),
   createPortal:      ()            => request('POST', '/v1/billing/portal', {}),
 

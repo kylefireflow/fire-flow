@@ -55,7 +55,7 @@ import {
 }                             from './state.js';
 import {
   isStripeConfigured, createCheckoutSession, createBillingPortal,
-  constructWebhookEvent, planFromPriceId, PLAN_DETAILS,
+  constructWebhookEvent, planFromPriceId, PLAN_DETAILS, createInvoiceItem,
 }                             from './stripe.js';
 import { generateInspectionReport } from './report.js';
 import {
@@ -427,6 +427,48 @@ async function processStripeEvent(event) {
       break;
     }
 
+    // Payment succeeded — calculate and charge any overages, then reset counter
+    case 'invoice.payment_succeeded': {
+      const customer_id = data.customer;
+      // Only process subscription invoices (not one-time invoiceitem charges)
+      if (data.billing_reason === 'manual') break;
+      const company = companyStore.values().find(c => c.stripe_customer_id === customer_id);
+      if (!company) break;
+
+      const plan        = company.plan ?? 'starter';
+      const planDetails = PLAN_DETAILS[plan] ?? PLAN_DETAILS.starter;
+      const used        = company.invoices_this_period ?? 0;
+      const included    = planDetails.invoices;
+      const overageCount = Math.max(0, used - included);
+
+      if (overageCount > 0) {
+        const overageRate  = planDetails.overage;          // e.g. 2.00
+        const overageTotal = overageCount * overageRate;   // in dollars
+        const amountCents  = Math.round(overageTotal * 100);
+        const description  = `Quote overage: ${overageCount} extra quote${overageCount !== 1 ? 's' : ''} × $${overageRate.toFixed(2)} (${planDetails.name} plan includes ${included}/mo)`;
+
+        try {
+          await createInvoiceItem({ customer_id, amount_cents: amountCents, description });
+          console.log(`[STRIPE] Overage charged for company ${company.id}: ${overageCount} quotes × $${overageRate} = $${overageTotal.toFixed(2)}`);
+        } catch (err) {
+          console.error(`[STRIPE] Failed to create overage invoice item for company ${company.id}:`, err.message);
+        }
+      }
+
+      // Reset the counter for the new billing period
+      const now = new Date();
+      const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+      companyStore.set(company.id, {
+        ...company,
+        invoices_this_period: 0,
+        usage_period:         periodKey,
+        updated_at:           now.toISOString(),
+      });
+
+      console.log(`[STRIPE] Usage reset for company ${company.id} (used ${used}/${included}, charged ${overageCount} overage)`);
+      break;
+    }
+
     // Payment failed — mark as past_due
     case 'invoice.payment_failed': {
       const customer_id = data.customer;
@@ -760,6 +802,21 @@ async function handleCreateQuote(req, res) {
     updated_at:     now,
   };
   quoteStore.set(base.id, quote);
+
+  // ── Track monthly usage for quota / overage billing ──────────────────────────
+  if (company_id) {
+    const company = companyStore.get(company_id) ?? { id: company_id };
+    const now = new Date();
+    const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    const prevPeriod = company.usage_period ?? '';
+    const count = prevPeriod === periodKey ? (company.invoices_this_period ?? 0) + 1 : 1;
+    companyStore.set(company_id, {
+      ...company,
+      invoices_this_period: count,
+      usage_period:         periodKey,
+      updated_at:           now.toISOString(),
+    });
+  }
 
   return send(res, 201, { success: true, data: quote });
 }
@@ -1255,6 +1312,26 @@ const server = createServer(async (req, res) => {
     }
 
     // Billing routes — admin only
+    if (path === '/v1/billing/usage' && method === 'GET') {
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
+      if (authEnabled() && !user) return;
+      const company_id = user?.company_id ?? user?.sub ?? null;
+      const company    = company_id ? (companyStore.get(company_id) ?? {}) : {};
+      const plan       = company.plan ?? 'starter';
+      const planDetails = PLAN_DETAILS[plan] ?? PLAN_DETAILS.starter;
+      const used       = company.invoices_this_period ?? 0;
+      const included   = planDetails.invoices;
+      const overage    = Math.max(0, used - included);
+      return send(res, 200, { success: true, data: {
+        plan,
+        used,
+        included,
+        overage,
+        overage_rate: planDetails.overage,
+        usage_period: company.usage_period ?? null,
+      }});
+    }
+
     if (path === '/v1/billing/subscription' && method === 'GET') {
       const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null };
       if (authEnabled() && !user) return;

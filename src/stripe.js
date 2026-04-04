@@ -253,6 +253,25 @@ export const PLAN_DETAILS = {
   pro:     { name: 'Pro',     price: '$399', priceNum: 399, invoices: 300, overage: 1.00 },
 };
 
+/**
+ * Create a one-time invoice item attached to a Stripe customer.
+ * It will be picked up automatically on their next invoice.
+ *
+ * @param {object} opts
+ * @param {string} opts.customer_id   Stripe customer ID (cus_xxx)
+ * @param {number} opts.amount_cents  Amount in cents (e.g. 400 = $4.00)
+ * @param {string} opts.description   Line item description
+ * @param {string} [opts.currency]    Defaults to 'usd'
+ */
+export async function createInvoiceItem({ customer_id, amount_cents, description, currency = 'usd' }) {
+  return stripeRequest('POST', '/invoiceitems', {
+    customer:    customer_id,
+    amount:      amount_cents,
+    currency,
+    description,
+  });
+}
+
 export function planFromPriceId(priceId) {
   if (priceId === PRICE_IDS.pro)      return 'pro';
   if (priceId === PRICE_IDS.growth)   return 'growth';
