@@ -1365,7 +1365,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/v1/billing/usage' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
       if (authEnabled() && !user) return;
       const company_id = user?.company_id ?? user?.sub ?? null;
       const company    = company_id ? (companyStore.get(company_id) ?? {}) : {};
@@ -1387,17 +1387,17 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/v1/billing/subscription' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null };
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
       if (authEnabled() && !user) return;
       return handleGetSubscription(req, res, user);
     }
     if (path === '/v1/billing/checkout' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, email: null };
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
       if (authEnabled() && !user) return;
       return await handleCreateCheckout(req, res, user);
     }
     if (path === '/v1/billing/portal' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null };
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
       if (authEnabled() && !user) return;
       return await handleCreatePortal(req, res, user);
     }
