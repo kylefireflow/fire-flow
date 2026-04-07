@@ -353,11 +353,45 @@ function planPickerCard(planId) {
 }
 
 function usageMeter(usage) {
-  const { used = 0, included = 50, overage = 0, overage_rate = 2.00, plan = 'starter' } = usage;
-  const pct       = Math.min(100, Math.round((used / included) * 100));
-  const isOver    = overage > 0;
-  const barColor  = isOver ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+  const {
+    used = 0, included = 50, overage = 0,
+    overage_rate = 2.00, overage_locked = false,
+    overage_balance_cents = 0,
+  } = usage;
+  const pct        = Math.min(100, Math.round((used / included) * 100));
+  const isOver     = overage > 0;
+  const barColor   = overage_locked ? 'var(--danger)' : isOver ? 'var(--warning)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
   const overageAmt = (overage * overage_rate).toFixed(2);
+  const balanceDollars = (overage_balance_cents / 100).toFixed(2);
+
+  if (overage_locked) {
+    return `
+      <div style="
+        background:rgba(239,68,68,.06);
+        border:2px solid rgba(239,68,68,.4);
+        border-radius:var(--r-xl);
+        padding:24px 28px;
+        margin-bottom:20px;
+      ">
+        <div style="display:flex;align-items:flex-start;gap:14px">
+          <div style="width:36px;height:36px;background:var(--danger-dim);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;color:var(--danger);flex-shrink:0;font-size:1.1rem">🔒</div>
+          <div style="flex:1">
+            <div style="font-size:.95rem;font-weight:800;color:var(--danger);margin-bottom:6px">
+              Quotes paused — outstanding overage balance
+            </div>
+            <div style="font-size:.85rem;color:var(--text-subtle);line-height:1.6;margin-bottom:12px">
+              Last month you exceeded your plan's included quotes. A charge of
+              <strong style="color:var(--danger)">$${balanceDollars}</strong> has been added to your next invoice.
+              New quotes will automatically resume once Stripe processes that invoice on your next renewal date.
+            </div>
+            <div style="background:var(--bg-raised);border-radius:var(--r-md);padding:12px 16px;font-size:.8rem;color:var(--text-muted)">
+              ⓘ No action needed — Stripe will process this automatically. If you believe this is an error, click <strong>Manage billing</strong> above.
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   return `
     <div style="

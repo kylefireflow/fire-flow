@@ -427,13 +427,22 @@ async function processStripeEvent(event) {
       break;
     }
 
-    // Payment succeeded — calculate and charge any overages, then reset counter
+    // Payment succeeded — clear any overage lock (overages just paid), then
+    // calculate overages for the period that just ended, lock if any exist,
+    // and reset the counter for the new period.
     case 'invoice.payment_succeeded': {
       const customer_id = data.customer;
-      // Only process subscription invoices (not one-time invoiceitem charges)
+      // Only process subscription invoices (not one-time manual charges)
       if (data.billing_reason === 'manual') break;
       const company = companyStore.values().find(c => c.stripe_customer_id === customer_id);
       if (!company) break;
+
+      const now     = new Date();
+      const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+
+      // ── Step 1: Clear any existing overage lock — this payment settled it ────
+      // (The pending invoice item we created last period was included in this invoice)
+      const wasLocked = company.overage_locked ?? false;
 
       const plan        = company.plan ?? 'starter';
       const planDetails = PLAN_DETAILS[plan] ?? PLAN_DETAILS.starter;
@@ -441,31 +450,34 @@ async function processStripeEvent(event) {
       const included    = planDetails.invoices;
       const overageCount = Math.max(0, used - included);
 
+      // ── Step 2: Charge overages for the period that just ended ────────────────
+      let newLock = false;
       if (overageCount > 0) {
-        const overageRate  = planDetails.overage;          // e.g. 2.00
-        const overageTotal = overageCount * overageRate;   // in dollars
+        const overageRate  = planDetails.overage;
+        const overageTotal = overageCount * overageRate;
         const amountCents  = Math.round(overageTotal * 100);
-        const description  = `Quote overage: ${overageCount} extra quote${overageCount !== 1 ? 's' : ''} × $${overageRate.toFixed(2)} (${planDetails.name} plan includes ${included}/mo)`;
+        const description  = `Quote overage: ${overageCount} extra quote${overageCount !== 1 ? 's' : ''} × $${overageRate.toFixed(2)} (${planDetails.name} plan — ${included} included/mo)`;
 
         try {
           await createInvoiceItem({ customer_id, amount_cents: amountCents, description });
-          console.log(`[STRIPE] Overage charged for company ${company.id}: ${overageCount} quotes × $${overageRate} = $${overageTotal.toFixed(2)}`);
+          newLock = true; // Lock until next invoice pays this item
+          console.log(`[STRIPE] Overage invoice item created for company ${company.id}: ${overageCount} × $${overageRate} = $${overageTotal.toFixed(2)}`);
         } catch (err) {
           console.error(`[STRIPE] Failed to create overage invoice item for company ${company.id}:`, err.message);
         }
       }
 
-      // Reset the counter for the new billing period
-      const now = new Date();
-      const periodKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+      // ── Step 3: Reset counter, apply new lock state ───────────────────────────
       companyStore.set(company.id, {
         ...company,
         invoices_this_period: 0,
         usage_period:         periodKey,
+        overage_locked:       newLock,
+        overage_balance_cents: newLock ? Math.round(overageCount * planDetails.overage * 100) : 0,
         updated_at:           now.toISOString(),
       });
 
-      console.log(`[STRIPE] Usage reset for company ${company.id} (used ${used}/${included}, charged ${overageCount} overage)`);
+      console.log(`[STRIPE] Period reset for company ${company.id} — used ${used}/${included}, overage ${overageCount}, locked=${newLock}, prev lock cleared=${wasLocked}`);
       break;
     }
 
@@ -801,6 +813,17 @@ async function handleCreateQuote(req, res) {
     state_history:  [{ from: 'draft', to: 'review', event: 'manual_create', at: now }],
     updated_at:     now,
   };
+  // ── Block creation if account is locked for unpaid overages ─────────────────
+  if (company_id) {
+    const co = companyStore.get(company_id);
+    if (co?.overage_locked) {
+      return send(res, 402, { success: false, error: {
+        code:    'OVERAGE_UNPAID',
+        message: 'Your account has an outstanding overage balance from last billing period. New quotes are paused until your next invoice is processed by Stripe (usually within minutes of your renewal date).',
+      }});
+    }
+  }
+
   quoteStore.set(base.id, quote);
 
   // ── Track monthly usage for quota / overage billing ──────────────────────────
@@ -1327,8 +1350,10 @@ const server = createServer(async (req, res) => {
         used,
         included,
         overage,
-        overage_rate: planDetails.overage,
-        usage_period: company.usage_period ?? null,
+        overage_rate:          planDetails.overage,
+        overage_balance_cents: company.overage_balance_cents ?? 0,
+        overage_locked:        company.overage_locked ?? false,
+        usage_period:          company.usage_period ?? null,
       }});
     }
 
