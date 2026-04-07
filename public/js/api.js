@@ -85,6 +85,10 @@ export const api = {
   acceptQuoteAsCustomer:  (id, token)        => request('POST', `/v1/quote/${id}/accept`,         {},       token),
   rejectQuoteAsCustomer:  (id, token, reason)=> request('POST', `/v1/quote/${id}/customer-reject`,{ reason }, token),
 
+  // Company branding
+  getBranding:       ()            => request('GET',  '/v1/company/branding'),
+  saveBranding:      (body)        => request('POST', '/v1/company/branding', body),
+
   // Billing
   getSubscription:   ()            => request('GET', '/v1/billing/subscription'),
   getUsage:          ()            => request('GET', '/v1/billing/usage'),

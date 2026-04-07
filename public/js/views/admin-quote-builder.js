@@ -8,7 +8,7 @@
  */
 
 import { api } from '../api.js';
-import { generateQuoteHTML, loadBranding, saveBranding } from '../quote-pdf.js';
+import { generateQuoteHTML } from '../quote-pdf.js';
 
 // Inline pricing helpers
 function loadPricing() {
@@ -53,6 +53,13 @@ function esc(s) {
 
 const TAX_RATE    = 0.08;
 
+// Branding loaded from server — populated in renderQuoteBuilder()
+let _branding = {
+  companyName: '', logoDataUrl: null, primaryColor: '#f97316',
+  contactPhone: '', contactEmail: '', contactWebsite: '', address: '',
+  footerText: 'Thank you for your business. Prices are valid for 30 days.',
+};
+
 let quoteItems     = [];
 let quoteNotes     = 'Prices are estimates and may vary based on field conditions. Final invoice will reflect actual materials used.';
 let sourceInspection = null;
@@ -69,6 +76,9 @@ export async function renderQuoteBuilder(container) {
   // Reset state
   quoteItems       = [];
   sourceInspection = null;
+
+  // Load server-side branding in the background (non-blocking — falls back to defaults)
+  api.getBranding().then(res => { if (res?.data) _branding = { ..._branding, ...res.data }; }).catch(() => {});
 
   container.innerHTML = `
     <div class="page-header">
@@ -286,104 +296,38 @@ function renderBody(insp) {
   window._exportPDF        = exportPDF;
   window._sendQuote        = sendQuote;
   window._recalc           = recalc;
-  window._saveBrandingForm = saveBrandingForm;
-  window._handleLogoUpload = handleLogoUpload;
 }
 
 // ── Branding panel ────────────────────────────────────────────────────────────
 
 function renderBrandingPanel() {
-  const b = loadBranding();
-  const logoHtml = b.logoDataUrl
-    ? `<div style="margin-bottom:6px"><img src="${b.logoDataUrl}" style="max-height:48px;max-width:160px;object-fit:contain;border-radius:4px;border:1px solid var(--border)"></div>
-       <button class="btn btn-ghost btn-sm" style="font-size:.72rem;width:100%" onclick="window._handleLogoUpload(null)">Remove Logo</button>`
-    : '';
+  const b = _branding;
   return `
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Company Name</label>
-      <input class="form-input" id="b-name" style="font-size:.82rem;padding:6px 10px"
-        placeholder="Acme Fire Protection" value="${esc(b.companyName)}">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Logo</label>
-      ${logoHtml}
-      <label style="display:block;cursor:pointer">
-        <div class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;font-size:.75rem">
-          ${b.logoDataUrl ? '↺ Replace Logo' : '⬆ Upload Logo'}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      ${b.logoDataUrl
+        ? `<img src="${b.logoDataUrl}" style="max-height:36px;max-width:120px;object-fit:contain;border-radius:4px;border:1px solid var(--border)">`
+        : `<div style="width:36px;height:36px;border-radius:6px;background:${esc(b.primaryColor)}22;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:1.1rem">🖼</div>`
+      }
+      <div style="flex:1;overflow:hidden">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${b.companyName ? esc(b.companyName) : '<span style="color:var(--text-muted);font-weight:400">No company name set</span>'}
         </div>
-        <input type="file" accept="image/*" style="display:none"
-          onchange="window._handleLogoUpload(this)">
-      </label>
-    </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Brand Color</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="color" id="b-color" value="${esc(b.primaryColor)}"
-          style="width:40px;height:32px;border:none;border-radius:6px;cursor:pointer;padding:2px">
-        <input class="form-input" id="b-color-hex" style="font-size:.82rem;padding:6px 10px;flex:1"
-          value="${esc(b.primaryColor)}" placeholder="#f97316"
-          oninput="document.getElementById('b-color').value=this.value">
+        <div style="font-size:.72rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:2px">
+          <span style="width:10px;height:10px;border-radius:50%;background:${esc(b.primaryColor)};display:inline-block;flex-shrink:0"></span>
+          ${esc(b.primaryColor)}
+        </div>
       </div>
     </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Phone</label>
-      <input class="form-input" id="b-phone" style="font-size:.82rem;padding:6px 10px"
-        placeholder="(555) 000-0000" value="${esc(b.contactPhone)}">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Email</label>
-      <input class="form-input" id="b-email" style="font-size:.82rem;padding:6px 10px"
-        placeholder="info@company.com" value="${esc(b.contactEmail)}">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Website</label>
-      <input class="form-input" id="b-website" style="font-size:.82rem;padding:6px 10px"
-        placeholder="www.company.com" value="${esc(b.contactWebsite)}">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label class="form-label" style="font-size:.75rem">Footer Text</label>
-      <input class="form-input" id="b-footer" style="font-size:.82rem;padding:6px 10px"
-        value="${esc(b.footerText)}">
-    </div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:.82rem"
-      onclick="window._saveBrandingForm()">
-      Save Branding
+    ${b.contactPhone || b.contactEmail ? `
+      <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-top:2px">
+        ${b.contactPhone ? `📞 ${esc(b.contactPhone)}<br>` : ''}
+        ${b.contactEmail ? `✉ ${esc(b.contactEmail)}` : ''}
+      </div>` : ''}
+    <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;font-size:.75rem;margin-top:6px"
+      onclick="window._navigate('/settings')">
+      ✏ Edit in Company Settings
     </button>
   `;
-}
-
-function saveBrandingForm() {
-  saveBranding({
-    companyName:    document.getElementById('b-name')?.value?.trim()    ?? '',
-    primaryColor:   document.getElementById('b-color')?.value           ?? '#f97316',
-    contactPhone:   document.getElementById('b-phone')?.value?.trim()   ?? '',
-    contactEmail:   document.getElementById('b-email')?.value?.trim()   ?? '',
-    contactWebsite: document.getElementById('b-website')?.value?.trim() ?? '',
-    footerText:     document.getElementById('b-footer')?.value?.trim()  ?? '',
-  });
-  window._notify?.success('Branding saved — will appear on all future quotes');
-}
-
-function handleLogoUpload(input) {
-  if (!input) {
-    saveBranding({ logoDataUrl: null });
-    document.getElementById('branding-body').innerHTML = renderBrandingPanel();
-    window._notify?.info('Logo removed');
-    return;
-  }
-  const file = input.files?.[0];
-  if (!file) return;
-  if (file.size > 500 * 1024) {
-    window._notify?.error('Logo must be under 500 KB');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    saveBranding({ logoDataUrl: e.target.result });
-    document.getElementById('branding-body').innerHTML = renderBrandingPanel();
-    window._notify?.success('Logo saved');
-  };
-  reader.readAsDataURL(file);
 }
 
 // ── Line items table ──────────────────────────────────────────────────────────
@@ -690,19 +634,10 @@ function collectQuoteData() {
   };
 }
 
-// ── Branding collector (reads live form values, falls back to saved) ──────────
+// ── Branding collector (uses server-loaded branding) ─────────────────────────
 
 function collectCurrentBranding() {
-  const saved = loadBranding();
-  return {
-    ...saved,
-    companyName:    document.getElementById('b-name')?.value?.trim()    ?? saved.companyName,
-    primaryColor:   document.getElementById('b-color')?.value           ?? saved.primaryColor,
-    contactPhone:   document.getElementById('b-phone')?.value?.trim()   ?? saved.contactPhone,
-    contactEmail:   document.getElementById('b-email')?.value?.trim()   ?? saved.contactEmail,
-    contactWebsite: document.getElementById('b-website')?.value?.trim() ?? saved.contactWebsite,
-    footerText:     document.getElementById('b-footer')?.value?.trim()  ?? saved.footerText,
-  };
+  return { ..._branding };
 }
 
 // ── PDF Preview (full-screen iframe modal) ────────────────────────────────────

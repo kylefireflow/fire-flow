@@ -19,6 +19,7 @@ import { renderCustomerQuote }      from './views/customer-quote.js';
 import { renderSignup }            from './views/signup.js';
 import { renderBilling }           from './views/billing.js';
 import { renderPricingConfig }     from './views/admin-pricing-config.js';
+import { renderCompanySettings }  from './views/admin-company-settings.js';
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ const routes = {
   '/quotes':            { view: renderQuoteBuilder,     roles: ['admin'] },
   '/billing':           { view: renderBilling,          roles: ['admin'] },
   '/pricing-config':    { view: renderPricingConfig,    roles: ['admin'] },
+  '/settings':          { view: renderCompanySettings,  roles: ['admin'] },
   '/my-day':            { view: renderMyDay,            roles: ['technician', 'admin'] },
   '/inspection/new':    { view: renderInspectionFlow,   roles: ['technician', 'admin'] },
 };
@@ -189,6 +191,7 @@ const _ico = {
   newInspect:  `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
   techview:    `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
   pricing:     `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/><circle cx="12" cy="12" r="10"/></svg>`,
+  settings:    `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`,
   logout:      `<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>`,
   menu:        `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
 };
@@ -205,6 +208,7 @@ function renderShell(role) {
     { path: '/quotes',      label: 'Quotes',      icon: _ico.quotes      },
     { path: '/billing',     label: 'Billing',     icon: _ico.billing     },
     { path: '/pricing-config', label: 'Pricing',   icon: _ico.pricing     },
+    { path: '/settings',    label: 'Settings',   icon: _ico.settings    },
     { path: '/my-day',      label: 'Tech View',   icon: _ico.techview    },
   ];
 

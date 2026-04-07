@@ -9,7 +9,7 @@
  * with an active service worker may keep running stale JS/CSS.
  */
 
-const CACHE_NAME = 'fireflow-v15';
+const CACHE_NAME = 'fireflow-v16';
 const SHELL_FILES = [
   '/',
   '/index.html',
@@ -30,6 +30,7 @@ const SHELL_FILES = [
   '/js/views/admin-inspection-review.js',
   '/js/views/admin-quote-builder.js',
   '/js/views/admin-pricing-config.js',
+  '/js/views/admin-company-settings.js',
   // Tech views
   '/js/views/tech-my-day.js',
   '/js/views/tech-inspection.js',

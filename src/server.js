@@ -1335,6 +1335,35 @@ const server = createServer(async (req, res) => {
     }
 
     // Billing routes — admin only
+    // Company branding — admin only
+    if (path === '/v1/company/branding' && method === 'GET') {
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
+      if (authEnabled() && !user) return;
+      const company_id = user?.company_id ?? user?.sub ?? 'default';
+      const company = companyStore.get(company_id) ?? {};
+      return send(res, 200, { success: true, data: company.branding ?? {} });
+    }
+
+    if (path === '/v1/company/branding' && method === 'POST') {
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
+      if (authEnabled() && !user) return;
+      const company_id = user?.company_id ?? user?.sub ?? 'default';
+      let brandRaw;
+      try { brandRaw = await readBody(req, 5 * 1024 * 1024); } // 5MB for logo
+      catch (err) { return send(res, 413, { success: false, error: { code: 'TOO_LARGE', message: 'Logo must be under 5 MB.' } }); }
+      let body;
+      try { body = JSON.parse(brandRaw || '{}'); }
+      catch (_) { return send(res, 400, { success: false, error: { code: 'INVALID_JSON', message: 'Invalid JSON.' } }); }
+      const existing = companyStore.get(company_id) ?? { id: company_id };
+      const allowed = ['companyName','logoDataUrl','primaryColor','contactPhone','contactEmail','contactWebsite','footerText','address'];
+      const branding = {};
+      for (const key of allowed) {
+        if (key in body) branding[key] = body[key];
+      }
+      companyStore.set(company_id, { ...existing, branding: { ...(existing.branding ?? {}), ...branding }, updated_at: new Date().toISOString() });
+      return send(res, 200, { success: true, data: companyStore.get(company_id).branding });
+    }
+
     if (path === '/v1/billing/usage' && method === 'GET') {
       const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
       if (authEnabled() && !user) return;
