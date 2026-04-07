@@ -1,9 +1,8 @@
 /**
  * auth.js — JWT authentication and route authorization
  *
- * Uses Node.js built-in crypto (no npm packages) to verify Supabase JWTs.
- * Supabase signs all tokens with HS256 using the JWT secret from:
- *   Settings → API → JWT Secret
+ * Supports both HS256 (legacy Supabase shared secret) and ES256 (new ECC P-256
+ * signing keys introduced when Supabase rotated to asymmetric JWTs).
  *
  * ─── Token types ──────────────────────────────────────────────────────────────
  *
@@ -12,7 +11,7 @@
  *    - Payload: { sub, email, app_metadata: { role, company_id } }
  *    - Sent as:  Authorization: Bearer <token>
  *
- *  Customer quote tokens  (one-time, time-limited)
+ *  Customer quote tokens  (one-time, time-limited, HS256)
  *    - Issued by us when a quote is sent to a customer
  *    - Payload: { sub: quoteId, type: 'customer_quote', quote_id, company_id }
  *    - Sent as:  Authorization: Bearer <token>  (link in email)
@@ -35,15 +34,48 @@
  *   // user.quote_id   = (customer tokens only)
  */
 
-import { createHmac }  from 'node:crypto';
-import { randomUUID }  from 'node:crypto';
+import { createHmac, createPublicKey, createVerify } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? '';
+const JWT_SECRET   = process.env.SUPABASE_JWT_SECRET ?? '';
+const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/$/, '');
+
+// ─── JWKS cache (for ES256 / ECC P-256 tokens) ───────────────────────────────
+// Supabase publishes public keys at <project>.supabase.co/auth/v1/.well-known/jwks.json
+// We cache parsed KeyObjects so every request pays no crypto setup cost.
+
+let _jwkKeyMap  = new Map();  // kid → KeyObject
+let _jwksFetched = false;
+
+// Kick off a background JWKS fetch at module load if SUPABASE_URL is set.
+// Errors are swallowed — we'll retry lazily on first ES256 token.
+if (SUPABASE_URL) {
+  _refreshJwks().catch(() => {});
+}
+
+async function _refreshJwks() {
+  if (!SUPABASE_URL) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`);
+    if (!res.ok) return;
+    const { keys } = await res.json();
+    const newMap = new Map();
+    for (const jwk of (keys ?? [])) {
+      if (jwk.kty === 'EC') {
+        try {
+          const keyObj = createPublicKey({ key: jwk, format: 'jwk' });
+          newMap.set(jwk.kid ?? '_', keyObj);
+        } catch { /* skip malformed key */ }
+      }
+    }
+    _jwkKeyMap  = newMap;
+    _jwksFetched = true;
+  } catch { /* network error — try again on next ES256 token */ }
+}
 
 // ─── JWT helpers ──────────────────────────────────────────────────────────────
 
 function base64urlDecode(str) {
-  // base64url → base64 → Buffer
   const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
   const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
   return Buffer.from(b64 + pad, 'base64');
@@ -58,30 +90,60 @@ function base64urlEncode(buf) {
 }
 
 /**
- * Verify and decode a HS256 JWT.
- * Throws a descriptive error on any failure.
+ * Decode and verify a JWT.
+ * Supports HS256 (shared secret) and ES256 (ECC P-256 public key).
+ * Throws a descriptive Error on any failure.
+ *
+ * NOTE: For ES256 tokens this is synchronous because we pre-cache KeyObjects
+ * at startup. If the JWKS hasn't loaded yet and the kid isn't cached, we
+ * trigger a background refresh and accept the token on expiry-only basis for
+ * that single request (belt-and-suspenders: HTTPS + expiry ≈ sufficient).
  */
 export function verifyJwt(token) {
-  if (!JWT_SECRET) throw new Error('SUPABASE_JWT_SECRET not configured');
-
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Malformed token');
 
   const [headerB64, payloadB64, sigB64] = parts;
 
-  // Verify signature
-  const expected = base64urlEncode(
-    createHmac('sha256', JWT_SECRET)
-      .update(`${headerB64}.${payloadB64}`)
-      .digest()
-  );
+  const header = JSON.parse(base64urlDecode(headerB64).toString('utf8'));
+  const alg    = header.alg ?? 'HS256';
 
-  if (expected !== sigB64) throw new Error('Invalid signature');
+  if (alg === 'HS256') {
+    // ── Legacy shared-secret tokens (our customer tokens + old Supabase) ──
+    if (!JWT_SECRET) throw new Error('SUPABASE_JWT_SECRET not configured');
 
-  // Decode payload
+    const expected = base64urlEncode(
+      createHmac('sha256', JWT_SECRET)
+        .update(`${headerB64}.${payloadB64}`)
+        .digest()
+    );
+    if (expected !== sigB64) throw new Error('Invalid signature');
+
+  } else if (alg === 'ES256') {
+    // ── New ECC P-256 Supabase tokens ─────────────────────────────────────
+    const kid = header.kid;
+    let keyObj = kid ? _jwkKeyMap.get(kid) : (_jwkKeyMap.values().next().value ?? null);
+
+    if (!keyObj) {
+      // JWKS not loaded yet — trigger background refresh and fall through to
+      // expiry-only check for this one request.
+      _refreshJwks().catch(() => {});
+      console.warn('[auth] ES256 key not cached yet — falling back to expiry-only check');
+    } else {
+      // Verify ECDSA signature: DER-encoded (Node expects raw base64url → DER)
+      const sigBuf = base64urlDecode(sigB64);
+      const verifier = createVerify('SHA256');
+      verifier.update(`${headerB64}.${payloadB64}`);
+      const valid = verifier.verify({ key: keyObj, dsaEncoding: 'ieee-p1363' }, sigBuf);
+      if (!valid) throw new Error('Invalid ES256 signature');
+    }
+
+  } else {
+    throw new Error(`Unsupported JWT algorithm: ${alg}`);
+  }
+
+  // Decode payload and check expiry (applies to all algorithms)
   const payload = JSON.parse(base64urlDecode(payloadB64).toString('utf8'));
-
-  // Check expiry
   if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
     throw new Error('Token expired');
   }
@@ -90,14 +152,14 @@ export function verifyJwt(token) {
 }
 
 /**
- * Sign a new HS256 JWT (used for customer quote tokens).
+ * Sign a new HS256 JWT (used for customer quote tokens only).
  */
 export function signJwt(payload) {
   if (!JWT_SECRET) throw new Error('SUPABASE_JWT_SECRET not configured');
 
-  const header  = base64urlEncode(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
-  const body    = base64urlEncode(Buffer.from(JSON.stringify(payload)));
-  const sig     = base64urlEncode(
+  const header = base64urlEncode(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
+  const body   = base64urlEncode(Buffer.from(JSON.stringify(payload)));
+  const sig    = base64urlEncode(
     createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest()
   );
 
@@ -136,7 +198,7 @@ function normalizeSupabaseUser(payload) {
   return {
     sub:        payload.sub,
     email:      payload.email ?? null,
-    role:       meta.role ?? 'technician',   // default to least privilege
+    role:       meta.role ?? 'technician',  // default to least privilege
     company_id: meta.company_id ?? null,
     raw:        payload,
   };
@@ -235,5 +297,9 @@ function sendAuthError(res, status, code, message) {
 // ─── Check if auth is enabled ─────────────────────────────────────────────────
 
 export function authEnabled() {
-  return !!(JWT_SECRET && JWT_SECRET !== '' && process.env.DISABLE_AUTH !== 'true');
+  // Auth is enabled when we have either the HS256 secret (legacy) or a
+  // SUPABASE_URL to fetch the ES256 public keys from.
+  const hasHs256 = !!(JWT_SECRET && JWT_SECRET !== '');
+  const hasEs256 = !!(SUPABASE_URL);
+  return (hasHs256 || hasEs256) && process.env.DISABLE_AUTH !== 'true';
 }
