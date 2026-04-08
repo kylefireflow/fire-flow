@@ -198,8 +198,8 @@ function normalizeSupabaseUser(payload) {
   return {
     sub:        payload.sub,
     email:      payload.email ?? null,
-    role:       meta.role ?? 'technician',  // default to least privilege
-    company_id: meta.company_id ?? null,
+    role:       meta.role ?? 'admin',       // default to admin until multi-tenant
+    company_id: meta.company_id ?? payload.sub, // fall back to user UUID as company
     raw:        payload,
   };
 }
