@@ -19,38 +19,35 @@ import { api }   from '../api.js';
 import { login } from '../auth.js';
 
 // ─── Plans ────────────────────────────────────────────────────────────────────
+// Keep in sync with billing.js and pricing.js
 
 const PLANS = {
   starter: {
-    id:       'starter',
-    name:     'Small Team',
-    badge:    'Starter',
-    price:    '$200',
-    desc:     'Perfect for 1–3 technicians',
-    features: [
-      'Up to 3 technician accounts',
-      'Guided inspection wizard',
-      'Deficiency capture + photo attachments',
-      'Offline mode',
-      'Admin scheduling dashboard',
-      'PDF inspection reports',
-    ],
+    id:    'starter',
+    name:  'Starter',
+    badge: 'Starter',
+    price: '$149',
+    desc:  '50 quotes/month included · $2.00 per extra',
+    color: 'var(--success)',
     brand: false,
   },
-  company: {
-    id:       'company',
-    name:     'Full Plan',
-    badge:    'Company',
-    price:    '$550',
-    desc:     'For 4+ technicians, the whole company',
-    features: [
-      'Unlimited technician accounts',
-      'Everything in Starter',
-      'Quote builder + customer approval flow',
-      'Advanced kanban job pipeline',
-      'Priority support + onboarding call',
-    ],
+  growth: {
+    id:    'growth',
+    name:  'Growth',
+    badge: 'Growth',
+    price: '$249',
+    desc:  '120 quotes/month included · $1.50 per extra',
+    color: 'var(--brand)',
     brand: true,
+  },
+  pro: {
+    id:    'pro',
+    name:  'Pro',
+    badge: 'Pro',
+    price: '$399',
+    desc:  '300 quotes/month included · $1.00 per extra',
+    color: '#a855f7',
+    brand: false,
   },
 };
 
@@ -71,7 +68,7 @@ export function renderSignup(c) {
   // Read ?plan= from URL
   const params = new URLSearchParams(location.search);
   const planParam = params.get('plan');
-  if (planParam === 'company' || planParam === 'starter') selectedPlan = planParam;
+  if (planParam && PLANS[planParam]) selectedPlan = planParam;
   // If plan was provided, skip step 1
   currentStep = planParam ? 2 : 1;
   companyName = '';
@@ -162,7 +159,8 @@ function renderStep1() {
 
     <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px" id="plan-options">
       ${planCard('starter')}
-      ${planCard('company')}
+      ${planCard('growth')}
+      ${planCard('pro')}
     </div>
 
     <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px;font-size:.95rem"
@@ -198,12 +196,12 @@ function planCard(planId) {
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
           <span style="font-size:.95rem;font-weight:700">${p.name}</span>
-          <span class="badge ${p.brand ? 'badge-orange' : 'badge-blue'}" style="font-size:.68rem">${p.badge}</span>
+          <span class="badge badge-orange" style="font-size:.68rem;background:${p.color}20;color:${p.color};border-color:${p.color}40">${p.badge}</span>
         </div>
         <div style="font-size:.8rem;color:var(--text-muted)">${p.desc}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:1.2rem;font-weight:900;color:${p.brand ? 'var(--brand)' : 'inherit'}">${p.price}</div>
+        <div style="font-size:1.2rem;font-weight:900;color:${p.color}">${p.price}</div>
         <div style="font-size:.7rem;color:var(--text-muted)">/month</div>
       </div>
     </div>
@@ -314,12 +312,12 @@ function bindStep1() {
       selectedPlan = card.dataset.plan;
       // Re-render just the plan cards section
       document.getElementById('plan-options').innerHTML =
-        planCard('starter') + planCard('company');
+        planCard('starter') + planCard('growth') + planCard('pro');
       document.querySelectorAll('.plan-card').forEach(c => {
         c.addEventListener('click', () => {
           selectedPlan = c.dataset.plan;
           document.getElementById('plan-options').innerHTML =
-            planCard('starter') + planCard('company');
+            planCard('starter') + planCard('growth') + planCard('pro');
           bindStep1Cards();
         });
       });
@@ -337,7 +335,7 @@ function bindStep1Cards() {
     card.addEventListener('click', () => {
       selectedPlan = card.dataset.plan;
       document.getElementById('plan-options').innerHTML =
-        planCard('starter') + planCard('company');
+        planCard('starter') + planCard('growth') + planCard('pro');
       bindStep1Cards();
     });
   });
