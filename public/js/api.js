@@ -9,6 +9,17 @@ const BASE = '';  // same-origin
 // are handled gracefully (the wrapper falls back to an in-memory store).
 import { getToken, refreshSession, scheduleTokenRefresh } from './auth.js';
 
+// One-shot guard: once a session expires we show ONE toast and redirect once.
+// Without this, every in-flight API call fires its own error toast.
+let _sessionExpiredHandled = false;
+
+function _handleSessionExpired() {
+  if (_sessionExpiredHandled) return;
+  _sessionExpiredHandled = true;
+  window._notify?.error('Your session has expired. Please log in again.');
+  setTimeout(() => { window._navigate?.('/login'); }, 1500);
+}
+
 // Build and fire a single fetch; returns the parsed JSON or throws.
 async function _doFetch(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
@@ -35,14 +46,10 @@ async function request(method, path, body, overrideToken) {
       try {
         newToken = await refreshSession();
         // Re-arm the proactive timer with the new token
-        scheduleTokenRefresh(() => {
-          window._notify?.error('Your session has expired. Please log in again.');
-          setTimeout(() => window._navigate?.('/login'), 1500);
-        });
+        scheduleTokenRefresh(() => _handleSessionExpired());
       } catch (_) {
         // Refresh failed — session is truly dead
-        window._notify?.error('Your session has expired. Please log in again.');
-        setTimeout(() => window._navigate?.('/login'), 1500);
+        _handleSessionExpired();
         throw Object.assign(new Error('Session expired'), { status: 401 });
       }
       // One retry with the fresh token
@@ -50,6 +57,11 @@ async function request(method, path, body, overrideToken) {
     }
     throw err;
   }
+}
+
+// Call this after a successful login to re-arm session expiry handling.
+export function resetSessionExpiredFlag() {
+  _sessionExpiredHandled = false;
 }
 
 export const api = {

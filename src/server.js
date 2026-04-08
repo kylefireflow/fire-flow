@@ -1151,6 +1151,15 @@ const server = createServer(async (req, res) => {
       return await handleStripeWebhook(req, res);
     }
 
+    // Public config — returns Supabase connection info for the frontend
+    // Both values are public (anon key is safe to expose in browser code)
+    if (path === '/v1/config' && method === 'GET') {
+      return send(res, 200, {
+        supabaseUrl:     process.env.SUPABASE_URL ?? '',
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? '',
+      });
+    }
+
     // Health — always public
     if ((path === '/health' || path === '/ready') && method === 'GET') {
       const qStats = {};

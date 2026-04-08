@@ -3,6 +3,7 @@
  */
 
 import { initAuth, isLoggedIn, getRole, getCurrentUser, logout, getToken, scheduleTokenRefresh } from './auth.js';
+import { resetSessionExpiredFlag } from './api.js';
 import { initOfflineDetection, syncQueue } from './offline.js';
 import { notify } from './toast.js';
 
@@ -137,6 +138,9 @@ function renderLoginPage() {
 }
 
 function _onSessionExpired() {
+  // Delegate to api.js one-shot handler to prevent duplicate toasts
+  // when multiple in-flight requests all fail at the same time.
+  import('./api.js').then(m => m.resetSessionExpiredFlag && (window.__sessionExpiredOnce = false));
   notify.error('Your session has expired. Please log in again.');
   setTimeout(() => navigate('/login'), 1500);
 }
@@ -145,6 +149,8 @@ function onLoginSuccess(user) {
   const role = user?.app_metadata?.role ?? user?.user_metadata?.role ?? 'technician';
   navigate(role === 'admin' ? '/dashboard' : '/my-day');
   notify.success('Welcome back!');
+  // Reset the one-shot guard so session expiry can be reported again after re-login
+  resetSessionExpiredFlag();
   // Start proactive refresh — silently renew the token 60s before it expires
   scheduleTokenRefresh(_onSessionExpired);
 }
@@ -480,8 +486,11 @@ window._logout = () => { logout(); _inspectionInProgress = false; location.reloa
 window._notify = notify;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-initAuth();
-// If the user was already logged in (page reload mid-session), arm the
-// proactive refresh timer so the existing token is renewed before it expires.
-if (isLoggedIn()) scheduleTokenRefresh(_onSessionExpired);
-render(location.pathname);
+// initAuth() fetches /v1/config from the server to get Supabase credentials,
+// so we must await it before rendering (otherwise DEV_MODE may be wrong).
+initAuth().then(() => {
+  // If the user was already logged in (page reload mid-session), arm the
+  // proactive refresh timer so the existing token is renewed before it expires.
+  if (isLoggedIn()) scheduleTokenRefresh(_onSessionExpired);
+  render(location.pathname);
+});

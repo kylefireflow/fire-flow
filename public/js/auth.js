@@ -1,19 +1,14 @@
 /**
  * auth.js — Session management for the Fire Flow frontend
  * Authenticates via Supabase Auth REST API, stores token in sessionStorage.
+ *
+ * Supabase connection details (URL + anon key) are fetched from the server at
+ * /v1/config so they never have to be hardcoded in client-side source code.
  */
 
 const KEY_TOKEN    = 'ff_token';
 const KEY_REFRESH  = 'ff_refresh';   // Supabase refresh_token (longer-lived)
 const KEY_USER     = 'ff_user';
-const KEY_SUPA_URL = 'ff_supabase_url';
-const KEY_ANON_KEY = 'ff_anon_key';
-
-// Supabase project details — set once, stored in sessionStorage
-const SUPABASE_URL     = 'https://mklldyjjqldzbcbhwdsu.supabase.co';
-// Your publishable key from Supabase → Project Settings → API Keys
-// This is safe to include in frontend code — it has no elevated permissions
-const SUPABASE_ANON_KEY = 'PASTE_YOUR_PUBLISHABLE_KEY_HERE';
 
 // BUG FIX: sessionStorage throws in Safari private browsing mode.
 // Wrap every access in a try-catch and fall back to an in-memory map.
@@ -22,9 +17,25 @@ function _ssGet(key)        { try { return sessionStorage.getItem(key);    } cat
 function _ssSet(key, value) { try { sessionStorage.setItem(key, value);   } catch { _memStore.set(key, value); } }
 function _ssDel(key)        { try { sessionStorage.removeItem(key);       } catch { _memStore.delete(key); } }
 
-export function initAuth() {
-  _ssSet(KEY_SUPA_URL, SUPABASE_URL);
-  _ssSet(KEY_ANON_KEY, SUPABASE_ANON_KEY);
+// Runtime config — populated by initAuth() from /v1/config
+let _supabaseUrl     = '';
+let _supabaseAnonKey = '';
+
+// DEV_MODE: true when the server hasn't configured a Supabase project yet.
+// In dev mode, login creates a synthetic local token and the server skips auth.
+export let DEV_MODE = true;  // starts true, flipped to false after config loads
+
+export async function initAuth() {
+  try {
+    const res  = await fetch('/v1/config');
+    const data = await res.json();
+    _supabaseUrl     = data.supabaseUrl     ?? '';
+    _supabaseAnonKey = data.supabaseAnonKey ?? '';
+    DEV_MODE = !_supabaseUrl || !_supabaseAnonKey;
+  } catch (_) {
+    // Network error — stay in dev mode, server-side auth will also be off
+    DEV_MODE = true;
+  }
 }
 
 export function getToken() {
@@ -67,12 +78,6 @@ export function getCompanyId() {
   return getCurrentUser()?.app_metadata?.company_id ?? null;
 }
 
-// ── Dev mode detection ────────────────────────────────────────────────────────
-// When SUPABASE_ANON_KEY is the placeholder, the app runs in local dev mode.
-// Auth is skipped on the server (no JWT_SECRET), so the frontend creates a
-// synthetic session token that passes the isLoggedIn() exp check.
-export const DEV_MODE = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === 'PASTE_YOUR_PUBLISHABLE_KEY_HERE';
-
 function _makeDevToken(email) {
   // Build a minimal JWT-shaped string so isLoggedIn()'s exp check passes.
   // NOT a real JWT — only used client-side in dev mode.
@@ -101,11 +106,11 @@ export async function login(email, password) {
     return devUser;
   }
 
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+  const res = await fetch(`${_supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': SUPABASE_ANON_KEY,
+      'apikey': _supabaseAnonKey,
     },
     body: JSON.stringify({ email, password }),
   });
@@ -139,9 +144,9 @@ export async function refreshSession() {
   const refreshToken = _ssGet(KEY_REFRESH);
   if (!refreshToken) throw new Error('No refresh token stored');
 
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+  const res = await fetch(`${_supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+    headers: { 'Content-Type': 'application/json', 'apikey': _supabaseAnonKey },
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
 
