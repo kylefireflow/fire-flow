@@ -630,22 +630,26 @@ async function handleCreateInspection(req, res) {
 }
 
 // GET /v1/inspections  — admin list with optional ?status= filter
-function handleListInspections(req, res, url) {
-  const status  = url.searchParams.get('status');
-  const exclude = url.searchParams.get('exclude'); // comma-separated states to exclude
+function handleListInspections(req, res, url, user) {
+  const status     = url.searchParams.get('status');
+  const exclude    = url.searchParams.get('exclude'); // comma-separated states to exclude
+  const company_id = user?.company_id;
   let list = inspectionStore.values();
-  if (status)  list = list.filter(i => i.state === status);
+  if (company_id) list = list.filter(i => i.company_id === company_id);
+  if (status)     list = list.filter(i => i.state === status);
   if (exclude) { const ex = new Set(exclude.split(',')); list = list.filter(i => !ex.has(i.state)); }
   list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   return send(res, 200, { success: true, data: list, count: list.length });
 }
 
 // GET /v1/jobs  — list with optional ?status=, ?technician_id=, ?date= filters
-function handleListJobs(req, res, url) {
+function handleListJobs(req, res, url, user) {
   const status       = url.searchParams.get('status');
   const techId       = url.searchParams.get('technician_id');
   const dateFilter   = url.searchParams.get('date');       // YYYY-MM-DD
+  const company_id   = user?.company_id;
   let list = jobStore.values();
+  if (company_id) list = list.filter(j => j.company_id === company_id);
   if (status)     list = list.filter(j => j.state === status);
   if (techId)     list = list.filter(j => j.technician_id === techId);
   if (dateFilter) list = list.filter(j => j.scheduled_date === dateFilter);
@@ -672,10 +676,12 @@ function _parseTime(slot) {
 }
 
 // GET /v1/quotes  — admin list with optional ?status= filter
-function handleListQuotes(req, res, url) {
-  const status = url.searchParams.get('status');
+function handleListQuotes(req, res, url, user) {
+  const status     = url.searchParams.get('status');
+  const company_id = user?.company_id;
   let list = quoteStore.values();
-  if (status) list = list.filter(q => q.state === status);
+  if (company_id) list = list.filter(q => q.company_id === company_id);
+  if (status)     list = list.filter(q => q.state === status);
   list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   return send(res, 200, { success: true, data: list, count: list.length });
 }
@@ -1230,19 +1236,22 @@ const server = createServer(async (req, res) => {
 
     // List endpoints — admin only
     if (path === '/v1/inspections' && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
-      return handleListInspections(req, res, url);
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev' };
+      if (authEnabled() && !user) return;
+      return handleListInspections(req, res, url, user);
     }
 
     if (path === '/v1/jobs' && method === 'GET') {
       // Technicians can query their own jobs; admins can query all
-      if (authEnabled() && !requireAuth(req, res, ['admin', 'technician'])) return;
-      return handleListJobs(req, res, url);
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : { company_id: 'dev' };
+      if (authEnabled() && !user) return;
+      return handleListJobs(req, res, url, user);
     }
 
     if (path === '/v1/quotes' && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
-      return handleListQuotes(req, res, url);
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev' };
+      if (authEnabled() && !user) return;
+      return handleListQuotes(req, res, url, user);
     }
 
     // Quote routes — admin creates/approves/rejects, customer accepts/rejects
