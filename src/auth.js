@@ -195,12 +195,13 @@ export function generateCustomerToken(quoteId, companyId) {
  */
 function normalizeSupabaseUser(payload) {
   const meta = payload.app_metadata ?? {};
+  // P5: Do NOT include `raw` payload — it would expose the full JWT claims (email,
+  // iat, exp, session_id, etc.) throughout every route handler that receives `user`.
   return {
     sub:        payload.sub,
     email:      payload.email ?? null,
     role:       meta.role ?? 'admin',       // default to admin until multi-tenant
     company_id: meta.company_id ?? payload.sub, // fall back to user UUID as company
-    raw:        payload,
   };
 }
 
@@ -208,13 +209,13 @@ function normalizeSupabaseUser(payload) {
  * Extract a normalized user object from a customer quote token.
  */
 function normalizeCustomerUser(payload) {
+  // P5: Do NOT include `raw` — only expose the minimal fields route handlers need.
   return {
     sub:        payload.sub,
     email:      null,
     role:       'customer',
     company_id: payload.company_id ?? null,
     quote_id:   payload.quote_id,
-    raw:        payload,
   };
 }
 

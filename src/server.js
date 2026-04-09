@@ -41,7 +41,7 @@
  */
 
 import { createServer }       from 'node:http';
-import { randomUUID }         from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { readFile }           from 'node:fs/promises';
 import { existsSync }         from 'node:fs';
 import { join, extname, resolve } from 'node:path';
@@ -70,6 +70,10 @@ import {
 
 const __dirname      = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC_DIR     = resolve(__dirname, '../public');
+
+// P3: Opaque customer link store — maps link_id (UUID) → { token, quote_id, expires_at }
+// This keeps the real JWT out of URLs, browser history, and server logs.
+const customerLinkStore = new Map();
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -171,7 +175,6 @@ function send(res, status, body) {
   res.writeHead(status, {
     'Content-Type':   'application/json',
     'Content-Length': Buffer.byteLength(json),
-    'X-Powered-By':   'Fire Flow Workflow Engine',
   });
   res.end(json);
 }
@@ -255,8 +258,8 @@ async function handleCreateCheckout(req, res, user) {
     return send(res, 400, { success: false, error: { code: 'NO_COMPANY', message: 'User has no company_id.' } });
   }
 
-  // Build redirect URLs — use the request's Host header so it works on any domain
-  const proto  = req.headers['x-forwarded-proto'] ?? 'http';
+  // Build redirect URLs — only trust x-forwarded-proto when behind a known proxy
+  const proto  = TRUST_PROXY ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
   const host   = req.headers['x-forwarded-host'] ?? req.headers['host'] ?? 'localhost:3003';
   const origin = `${proto}://${host}`;
 
@@ -304,7 +307,7 @@ async function handleCreatePortal(req, res, user) {
     }});
   }
 
-  const proto  = req.headers['x-forwarded-proto'] ?? 'http';
+  const proto  = TRUST_PROXY ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
   const host   = req.headers['x-forwarded-host'] ?? req.headers['host'] ?? 'localhost:3003';
   const origin = `${proto}://${host}`;
 
@@ -581,7 +584,7 @@ async function handleSignup(req, res) {
     // Return a synthetic response so the frontend can proceed with a login call.
     // The login.js will hit the Supabase auth endpoint directly (and also fail
     // gracefully if the anon key is a placeholder), so this stays self-contained.
-    console.log(`[SIGNUP DEV] Would create admin account for ${email} (company: ${company_name}, plan: ${plan ?? 'starter'})`);
+    console.log(`[SIGNUP DEV] Dev mode — admin account creation skipped (plan: ${plan ?? 'starter'})`);
     return send(res, 201, { success: true, data: {
       email,
       company_id,
@@ -593,12 +596,13 @@ async function handleSignup(req, res) {
 }
 
 // POST /v1/inspection
-async function handleCreateInspection(req, res) {
+async function handleCreateInspection(req, res, user) {
   const body = await parseBody(req, res);
   if (body === null) return;
 
-  const { company_id, technician_id, address, inspection_type, notes, metadata } = body;
-  if (!company_id) return send(res, 400, { success: false, error: { code: 'INVALID_REQUEST', message: 'company_id required' } });
+  // company_id MUST come from the verified JWT — never from the request body
+  const company_id = user?.company_id ?? 'dev';
+  const { technician_id, address, inspection_type, notes, metadata } = body;
 
   const inspection = createInspection({ company_id, technician_id, address, inspection_type, notes });
 
@@ -740,8 +744,17 @@ async function handleAddRecording(req, res, id) {
   }
 
   const recId = randomUUID();
+  const now   = new Date().toISOString();
   const recordings = [...(inspection.voice_recordings ?? []), {
-    id: recId, transcript, context: context ?? {}, processed: false, created_at: new Date().toISOString(),
+    id:               recId,
+    transcript,
+    context:          context ?? {},
+    processed:        false,
+    created_at:       now,
+    // P5: raw audio is never stored — only the transcript text.  The transcript
+    // itself will be purged by the retention cleanup job after RETENTION_DAYS.
+    raw_audio_stored: false,
+    transcribed_at:   now,
   }];
 
   inspectionStore.set(id, { ...inspection, voice_recordings: recordings, updated_at: new Date().toISOString() });
@@ -752,6 +765,11 @@ async function handleAddRecording(req, res, id) {
 }
 
 // POST /v1/inspection/:id/image
+// Max allowed raw base64 image size (≈ 5 MB decoded, ~6.8 MB base64-encoded string)
+const MAX_IMAGE_BYTES = parseInt(process.env.MAX_IMAGE_BYTES ?? String(5 * 1024 * 1024), 10);
+// Allowed MIME prefixes for uploaded images (P2 privacy fix)
+const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
 async function handleAddImage(req, res, id) {
   const inspection = inspectionStore.get(id);
   if (!inspection) return send(res, 404, { success: false, error: { code: 'NOT_FOUND', message: `Inspection ${id} not found` } });
@@ -765,6 +783,28 @@ async function handleAddImage(req, res, id) {
   const { image, context } = body;
   if (!image || !image.type) {
     return send(res, 400, { success: false, error: { code: 'INVALID_REQUEST', message: 'image.type required (base64 or url)' } });
+  }
+
+  // P2: Validate base64 image uploads — enforce MIME type + size limits
+  if (image.type === 'base64' && image.data) {
+    // Extract mime from data URI prefix (data:image/jpeg;base64,...) or from image.mime field
+    const mimeMatch = typeof image.data === 'string' ? image.data.match(/^data:([^;]+);base64,/) : null;
+    const mime      = mimeMatch?.[1] ?? image.mime ?? '';
+    if (!ALLOWED_IMAGE_MIME.has(mime)) {
+      return send(res, 415, { success: false, error: {
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+        message: `Image type '${mime}' not allowed. Use JPEG, PNG, WebP, or GIF.`,
+      }});
+    }
+    // Decode byte length from base64 string length (without header)
+    const b64Data   = mimeMatch ? image.data.slice(mimeMatch[0].length) : image.data;
+    const byteCount = Math.floor(b64Data.length * 0.75);
+    if (byteCount > MAX_IMAGE_BYTES) {
+      return send(res, 413, { success: false, error: {
+        code: 'IMAGE_TOO_LARGE',
+        message: `Image exceeds ${MAX_IMAGE_BYTES / (1024 * 1024)} MB limit.`,
+      }});
+    }
   }
 
   const imgId = randomUUID();
@@ -797,12 +837,13 @@ async function handleSubmitInspection(req, res, id) {
 }
 
 // POST /v1/quote  — admin creates a quote manually (bypasses AI pipeline)
-async function handleCreateQuote(req, res) {
+async function handleCreateQuote(req, res, user) {
   const body = await parseBody(req, res);
   if (body === null) return;
 
-  const { company_id, inspection_id, customer_email, address, contact, line_items, notes, valid_until } = body;
-  if (!company_id) return send(res, 400, { success: false, error: { code: 'INVALID_REQUEST', message: 'company_id required' } });
+  // company_id MUST come from the verified JWT — never from the request body
+  const company_id = user?.company_id ?? 'dev';
+  const { inspection_id, customer_email, address, contact, line_items, notes, valid_until } = body;
 
   // Create base entity then promote directly to review (skip AI pipeline)
   const base = createQuote({ company_id, inspection_id: inspection_id ?? null });
@@ -894,19 +935,31 @@ async function handleSendQuote(req, res, id) {
     customerToken = `${hdr}.${bdy}.`;
   }
 
-  const proto       = req.headers['x-forwarded-proto'] ?? 'http';
+  const proto       = TRUST_PROXY ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
   const host        = req.headers.host ?? 'localhost:3003';
-  const customerUrl = `${proto}://${host}/customer-quote?token=${customerToken}`;
 
-  // Persist token + URL on the quote
-  quoteStore.set(id, { ...quoteStore.get(id), customer_token: customerToken, customer_url: customerUrl, updated_at: new Date().toISOString() });
+  // P3: Use opaque link_id in the URL — JWT never appears in browser history or logs
+  const linkId      = randomUUID();
+  const linkExpiry  = new Date(Date.now() + 30 * 86_400 * 1000).toISOString();
+  customerLinkStore.set(linkId, { token: customerToken, quote_id: id, expires_at: linkExpiry });
+  const customerUrl = `${proto}://${host}/customer-quote?link=${linkId}`;
+
+  // Store only a SHA-256 hash of the token — never the raw JWT (P1 privacy fix)
+  const tokenHash = createHash('sha256').update(customerToken).digest('hex');
+  quoteStore.set(id, {
+    ...quoteStore.get(id),
+    customer_token_hash: tokenHash,
+    customer_link_id:    linkId,
+    customer_url:        customerUrl,
+    updated_at:          new Date().toISOString(),
+  });
 
   return send(res, 200, {
     success: true,
     data: {
       quote:          quoteStore.get(id),
       customer_url:   customerUrl,
-      customer_token: customerToken,
+      customer_token: customerToken,   // returned once to caller; NOT persisted in full
     },
   });
 }
@@ -1133,6 +1186,16 @@ const server = createServer(async (req, res) => {
   res.setHeader('Vary', 'Origin');
   res.setHeader('X-Request-Id', requestId);
 
+  // ── Security headers (P2 privacy fix) ─────────────────────────────────────
+  res.setHeader('X-Content-Type-Options',   'nosniff');
+  res.setHeader('X-Frame-Options',          'DENY');
+  res.setHeader('Referrer-Policy',          'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy',       'geolocation=(), microphone=(), camera=()');
+  // HSTS — only set when we are confident we're on HTTPS (i.e. TRUST_PROXY is on)
+  if (TRUST_PROXY) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  // Remove server fingerprinting header added by serveStatic
+  res.removeHeader('X-Powered-By');
+
   if (method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   // ── Static file serving (anything not starting with /v1 or /health) ─────────
@@ -1193,8 +1256,9 @@ const server = createServer(async (req, res) => {
 
     // Inspection routes — technician or admin
     if (path === '/v1/inspection' && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['technician', 'admin'])) return;
-      return await handleCreateInspection(req, res);
+      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : { company_id: 'dev' };
+      if (authEnabled() && !user) return;
+      return await handleCreateInspection(req, res, user);
     }
 
     const inspMatch = path.match(/^\/v1\/inspection\/([^/]+)$/);
@@ -1254,10 +1318,28 @@ const server = createServer(async (req, res) => {
       return handleListQuotes(req, res, url, user);
     }
 
+    // P3: Opaque link exchange — public endpoint, no auth token in URL
+    // GET /v1/quote/link/:link_id → resolves link_id to token, verifies it, returns quote
+    const linkExchangeMatch = path.match(/^\/v1\/quote\/link\/([^/]+)$/);
+    if (linkExchangeMatch && method === 'GET') {
+      const linkId  = linkExchangeMatch[1];
+      const entry   = customerLinkStore.get(linkId);
+      if (!entry) return send(res, 404, { success: false, error: { code: 'NOT_FOUND', message: 'Link not found or expired.' } });
+      if (new Date(entry.expires_at) < new Date()) {
+        customerLinkStore.delete(linkId);
+        return send(res, 410, { success: false, error: { code: 'LINK_EXPIRED', message: 'This quote link has expired.' } });
+      }
+      const quote = quoteStore.get(entry.quote_id);
+      if (!quote) return send(res, 404, { success: false, error: { code: 'NOT_FOUND', message: 'Quote not found.' } });
+      // Return the token once so the frontend can make authenticated sub-requests if needed
+      return send(res, 200, { success: true, data: { quote, customer_token: entry.token } });
+    }
+
     // Quote routes — admin creates/approves/rejects, customer accepts/rejects
     if (path === '/v1/quote' && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
-      return await handleCreateQuote(req, res);
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev' };
+      if (authEnabled() && !user) return;
+      return await handleCreateQuote(req, res, user);
     }
 
     const quoteMatch = path.match(/^\/v1\/quote\/([^/]+)$/);
@@ -1420,6 +1502,54 @@ const server = createServer(async (req, res) => {
       return await handleCreatePortal(req, res, user);
     }
 
+    // P5: Right-to-erasure — soft-deletes all company data and marks the record
+    // for hard-deletion by the nightly retention cleanup (after RETENTION_DAYS).
+    // Requires admin auth on the company being erased.
+    if (path === '/v1/company' && method === 'DELETE') {
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev' };
+      if (authEnabled() && !user) return;
+      const company_id = user?.company_id ?? user?.sub;
+      if (!company_id) return send(res, 400, { success: false, error: { code: 'NO_COMPANY', message: 'No company_id on token.' } });
+
+      const now = new Date().toISOString();
+
+      // Soft-delete the company record (hard-deletion happens via retention cleanup)
+      const existingCo = companyStore.get(company_id);
+      companyStore.set(company_id, { ...(existingCo ?? { id: company_id }), deleted_at: now, updated_at: now });
+
+      // Scrub all inspections for this company
+      for (const insp of inspectionStore.values()) {
+        if (insp.company_id === company_id) {
+          inspectionStore.set(insp.id, { ...insp, deleted_at: now, updated_at: now,
+            // Strip PII fields immediately
+            address: null, contact: null, phone: null, notes: null,
+            voice_recordings: (insp.voice_recordings ?? []).map(r => ({ ...r, transcript: null, transcript_purged_at: now })),
+          });
+        }
+      }
+
+      // Scrub all quotes for this company
+      for (const q of quoteStore.values()) {
+        if (q.company_id === company_id) {
+          quoteStore.set(q.id, { ...q, deleted_at: now, updated_at: now,
+            customer_email: null, address: null, contact: null, notes: null,
+          });
+        }
+      }
+
+      // Invalidate all outstanding customer links for this company
+      for (const [linkId, entry] of customerLinkStore.entries()) {
+        const q = quoteStore.get(entry.quote_id);
+        if (q?.company_id === company_id) customerLinkStore.delete(linkId);
+      }
+
+      console.log(`[ERASURE] Company ${company_id} soft-deleted and PII scrubbed at ${now}`);
+      return send(res, 200, { success: true, data: {
+        message: 'Your company data has been queued for deletion. All PII has been scrubbed immediately. The account record will be permanently deleted within ' + RETENTION_DAYS + ' days.',
+        deleted_at: now,
+      }});
+    }
+
     send(res, 404, { success: false, error: { code: 'NOT_FOUND', message: `${method} ${path} not found.` } });
 
   } catch (err) {
@@ -1459,6 +1589,62 @@ server.listen(PORT, HOST, async () => {
   await bootstrap();
 });
 server.on('error', err => { console.error('Server error:', err); process.exit(1); });
+
+// ─── P4: Nightly data-retention cleanup ──────────────────────────────────────
+// Runs once on boot and then every 24 h.  Purges:
+//   • Expired customer link entries from customerLinkStore
+//   • Soft-deleted company records older than the retention window
+// Adjust RETENTION_DAYS to comply with your data-retention policy (default 90 days).
+const RETENTION_DAYS = parseInt(process.env.RETENTION_DAYS ?? '90', 10);
+
+function runRetentionCleanup() {
+  const now = Date.now();
+
+  // 1. Expired customer links
+  let expiredLinks = 0;
+  for (const [linkId, entry] of customerLinkStore.entries()) {
+    if (new Date(entry.expires_at).getTime() < now) {
+      customerLinkStore.delete(linkId);
+      expiredLinks++;
+    }
+  }
+
+  // 2. Soft-deleted company records past retention window
+  const retentionCutoff = new Date(now - RETENTION_DAYS * 86_400 * 1000).toISOString();
+  let purgedCompanies = 0;
+  for (const company of companyStore.values()) {
+    if (company.deleted_at && company.deleted_at < retentionCutoff) {
+      companyStore.delete(company.id);
+      purgedCompanies++;
+    }
+  }
+
+  // 3. P5: Strip transcript text from voice recordings older than RETENTION_DAYS
+  // Raw audio is never stored; this clears the transcript string from old inspections.
+  let purgedTranscripts = 0;
+  for (const inspection of inspectionStore.values()) {
+    if (!Array.isArray(inspection.voice_recordings)) continue;
+    let changed = false;
+    const updated = inspection.voice_recordings.map(rec => {
+      if (rec.transcript && rec.transcribed_at && rec.transcribed_at < retentionCutoff) {
+        changed = true;
+        purgedTranscripts++;
+        return { ...rec, transcript: null, transcript_purged_at: new Date(now).toISOString() };
+      }
+      return rec;
+    });
+    if (changed) inspectionStore.set(inspection.id, { ...inspection, voice_recordings: updated });
+  }
+
+  if (expiredLinks + purgedCompanies + purgedTranscripts > 0) {
+    console.log(`[RETENTION] Cleanup: removed ${expiredLinks} expired link(s), ${purgedCompanies} deleted company record(s), ${purgedTranscripts} old transcript(s)`);
+  }
+}
+
+// Run immediately on boot, then every 24 h
+runRetentionCleanup();
+const _retentionTimer = setInterval(runRetentionCleanup, 24 * 60 * 60 * 1000);
+_retentionTimer.unref(); // Don't prevent graceful shutdown
 
 function shutdown(sig) {
   console.log(`\n${sig} — closing…`);

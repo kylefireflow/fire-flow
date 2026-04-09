@@ -39,23 +39,45 @@ export async function renderCustomerQuote(container) {
     </div>
   `;
 
-  // Extract token from URL
-  const token = new URLSearchParams(location.search).get('token');
-  if (!token) {
-    showError('No quote token found in the URL. Please use the link from your email.');
-    return;
-  }
+  // P3: Use opaque link_id — JWT never appears in URL, browser history, or logs
+  const params = new URLSearchParams(location.search);
+  const linkId = params.get('link');
+  // Backwards-compat: also accept legacy ?token= links for quotes sent before this update
+  const legacyToken = params.get('token');
 
-  // Decode token payload (client-side, no verification — server verifies on API call)
-  const payload = decodeTokenPayload(token);
-  if (!payload?.quote_id) {
-    showError('This link appears to be invalid or expired. Please contact your service provider.');
+  if (!linkId && !legacyToken) {
+    showError('No quote link found in the URL. Please use the link from your email.');
     return;
   }
 
   try {
-    const res   = await api.getQuoteForCustomer(payload.quote_id, token);
-    const quote = res.data;
+    let quote, token;
+
+    if (linkId) {
+      // New opaque-link flow: exchange link_id for quote + token in one server call
+      const linkRes = await fetch(`/v1/quote/link/${encodeURIComponent(linkId)}`);
+      const linkData = await linkRes.json();
+      if (!linkRes.ok || !linkData.success) {
+        const msg = linkRes.status === 410 ? 'This quote link has expired.'
+                  : linkRes.status === 404 ? 'This link is no longer valid.'
+                  : 'Failed to load your quote.';
+        showError(msg + ' Please contact your service provider for a new link.');
+        return;
+      }
+      quote = linkData.data.quote;
+      token = linkData.data.customer_token;
+    } else {
+      // Legacy ?token= flow (backwards compatibility)
+      const payload = decodeTokenPayload(legacyToken);
+      if (!payload?.quote_id) {
+        showError('This link appears to be invalid or expired. Please contact your service provider.');
+        return;
+      }
+      const res = await api.getQuoteForCustomer(payload.quote_id, legacyToken);
+      quote = res.data;
+      token = legacyToken;
+    }
+
     renderQuote(quote, token);
   } catch (err) {
     if (err.status === 401 || err.status === 403) {
