@@ -75,6 +75,18 @@ export function renderLogin(container, onSuccess) {
           <p style="font-size:.68rem;color:var(--text-muted);margin-top:4px;letter-spacing:.2px">
             Fire suppression inspection platform · v1.0
           </p>
+
+          <!-- Trust statements -->
+          <div style="margin-top:18px;display:flex;flex-direction:column;gap:7px;width:100%;border-top:1px solid var(--border-faint);padding-top:16px">
+            <div style="display:flex;align-items:flex-start;gap:8px;font-size:.69rem;color:var(--text-muted);line-height:1.4">
+              <svg style="flex-shrink:0;margin-top:1px;opacity:.6" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Fire Flow isolates every company's data. No cross-access. Ever.</span>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:8px;font-size:.69rem;color:var(--text-muted);line-height:1.4">
+              <svg style="flex-shrink:0;margin-top:1px;opacity:.6" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>We never store payment details — handled securely by Stripe.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
