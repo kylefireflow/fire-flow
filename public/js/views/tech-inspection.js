@@ -19,6 +19,7 @@ import { localInspections, localPhotos, syncQueue } from '../offline.js';
 import { getCompanyId, getCurrentUser } from '../auth.js';
 import { setInspectionInProgress } from '../app.js';
 import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
+import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
 
 const esc = window._escapeHtml ?? ((s) => String(s ?? ''));
 
@@ -334,7 +335,7 @@ function saveInfoStep() {
   return true;
 }
 
-// ── Step 2: Checkpoints ───────────────────────────────────────────────────────
+// -- Step 2: Checkpoints --
 
 function renderCheckpointStep() {
   const cps       = draft.checkpoints;
@@ -378,16 +379,16 @@ function renderCheckpointStep() {
 
     const failNoteRow = isFail ? `
       <div style="margin-top:8px">
-        <textarea class="form-textarea" style="min-height:64px;font-size:.82rem;border-color:${needNote?'var(--danger)':'var(--border)'}"
-          placeholder="Required: describe what you found…"
+        <textarea class="form-textarea" id="cp-note-${i}" style="min-height:64px;font-size:.82rem;border-color:${needNote?'var(--danger)':'var(--border)'}"
+          placeholder="Required: describe what you found..."
           oninput="window._setCheckpointNotes(${i},this.value)">${esc(cp.notes ?? '')}</textarea>
-        ${needNote?'<div style="font-size:.72rem;color:var(--danger);margin-top:3px">Fail note required before advancing</div>':''}
+        ${needNote?`<div id="cp-note-hint-${i}" style="font-size:.72rem;color:var(--danger);margin-top:3px">Fail note required before advancing</div>`:''}
       </div>` : '';
 
     const notesRow = (isNotes && cp.result !== 'fail') ? `
       <div style="margin-top:8px">
         <textarea class="form-textarea" style="min-height:56px;font-size:.82rem"
-          placeholder="${esc(cp.description || 'Enter observation…')}"
+          placeholder="${esc(cp.description || 'Enter observation...')}"
           oninput="window._setCheckpointNotes(${i},this.value)">${esc(cp.notes ?? '')}</textarea>
       </div>` : '';
 
@@ -409,8 +410,6 @@ function renderCheckpointStep() {
 
   return `
     <div style="display:flex;flex-direction:column;gap:10px">
-
-      <!-- Progress header -->
       <div class="card card-sm" style="padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <span id="cp-remaining-count" style="font-size:.8rem;font-weight:600;color:var(--text-muted)">${answered} of ${total} answered</span>
@@ -432,7 +431,7 @@ function renderCheckpointStep() {
 
       <div id="fail-count-banner"
         style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:var(--r-md);padding:12px;font-size:.82rem;color:var(--danger);${failCount === 0 ? 'display:none' : ''}">
-        ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed — add notes, then capture details in the next step.
+        ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed - add notes, then capture details in the next step.
       </div>
     </div>
   `;
@@ -733,6 +732,20 @@ function bindStepEvents(container) {
       }
     }
 
+    if (STEPS[currentStep].id === 'checkpoints') {
+      const cps = draft.checkpoints;
+      const missingRequired = cps.filter(c => c.required && c.result === null);
+      if (missingRequired.length > 0) {
+        notify.error(missingRequired.length + ' required checkpoint' + (missingRequired.length > 1 ? 's' : '') + ' not yet marked.');
+        return;
+      }
+      const failNoNote = cps.filter(c => c.result === 'fail' && !(c.notes ?? '').trim());
+      if (failNoNote.length > 0) {
+        notify.error('Add fail notes for ' + failNoNote.length + ' failed checkpoint' + (failNoNote.length > 1 ? 's' : '') + ' before continuing.');
+        return;
+      }
+    }
+
     if (currentStep < STEPS.length - 1) {
       currentStep++;
       // BUG FIX: push history entry so browser Back comes back to this step
@@ -849,6 +862,20 @@ function bindStepEvents(container) {
         const hint = ta.nextElementSibling;
         if (hint && hint.style && hint.tagName === 'DIV') hint.style.display = 'none';
       }
+    }
+  };
+
+  window._setCheckpointValue = (i, val) => {
+    draft.checkpoints[i].value = val;
+  };
+
+  window._setCheckpointNotes = (i, val) => {
+    draft.checkpoints[i].notes = val;
+    const hint = document.getElementById('cp-note-hint-' + i);
+    const ta   = document.getElementById('cp-note-' + i);
+    if (val.trim()) {
+      if (hint) hint.style.display = 'none';
+      if (ta)   ta.style.borderColor = 'var(--border)';
     }
   };
 
