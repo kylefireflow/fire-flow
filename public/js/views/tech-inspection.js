@@ -20,6 +20,7 @@ import { getCompanyId, getCurrentUser } from '../auth.js';
 import { setInspectionInProgress } from '../app.js';
 import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
 import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
+import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
 
 const esc = window._escapeHtml ?? ((s) => String(s ?? ''));
 
@@ -746,6 +747,20 @@ function bindStepEvents(container) {
       }
     }
 
+    if (STEPS[currentStep].id === 'checkpoints') {
+      const cps = draft.checkpoints;
+      const missingRequired = cps.filter(c => c.required && c.result === null);
+      if (missingRequired.length > 0) {
+        notify.error(missingRequired.length + ' required checkpoint' + (missingRequired.length > 1 ? 's' : '') + ' not yet marked.');
+        return;
+      }
+      const failNoNote = cps.filter(c => c.result === 'fail' && !(c.notes ?? '').trim());
+      if (failNoNote.length > 0) {
+        notify.error('Add fail notes for ' + failNoNote.length + ' failed checkpoint' + (failNoNote.length > 1 ? 's' : '') + ' before continuing.');
+        return;
+      }
+    }
+
     if (currentStep < STEPS.length - 1) {
       currentStep++;
       // BUG FIX: push history entry so browser Back comes back to this step
@@ -848,6 +863,21 @@ function bindStepEvents(container) {
     if (val.trim()) {
       if (hint) hint.style.display = 'none';
       if (ta)   ta.style.borderColor = 'var(--border)';
+    }
+  };
+
+  window._setCheckpointValue = (i, val) => {
+    draft.checkpoints[i].value = val;
+  };
+
+  window._setCheckpointNotes = (i, val) => {
+    draft.checkpoints[i].notes = val;
+    const row = document.getElementById('cp-row-' + i);
+    if (row && val.trim()) {
+      const ta = row.querySelector('textarea');
+      if (ta) ta.style.borderColor = 'var(--border)';
+      const hint = ta && ta.nextElementSibling;
+      if (hint) hint.style.display = 'none';
     }
   };
 
