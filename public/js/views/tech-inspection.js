@@ -20,7 +20,6 @@ import { getCompanyId, getCurrentUser } from '../auth.js';
 import { setInspectionInProgress } from '../app.js';
 import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
 import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
-import { NFPA13_CHECKLISTS } from '../nfpa-checklists.js';
 
 const esc = window._escapeHtml ?? ((s) => String(s ?? ''));
 
