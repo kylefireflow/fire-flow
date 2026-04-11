@@ -354,8 +354,6 @@ function renderCheckpointStep() {
     const borderClr = cp.result === 'pass' ? 'rgba(34,197,94,.35)'
                     : cp.result === 'fail' ? 'rgba(239,68,68,.35)'
                     : 'var(--border)';
-    const passActive = cp.result === 'pass' ? 'active' : '';
-    const failActive = cp.result === 'fail' ? 'active' : '';
 
     const buttons = isNotes
       ? `<div onclick="window._setCheckpoint(${i},'pass')" title="Mark done" style="
@@ -363,10 +361,10 @@ function renderCheckpointStep() {
             background:${cp.result==='pass'?'var(--success)':'var(--border)'};
             display:flex;align-items:center;justify-content:center">
             ${cp.result==='pass'?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
-          </div>`
+         </div>`
       : `<div style="display:flex;gap:4px;flex-shrink:0">
-           <button class="check-btn pass ${passActive}" onclick="window._setCheckpoint(${i},'pass')" title="Pass" style="width:30px;height:30px;font-size:.68rem;font-weight:700">P</button>
-           <button class="check-btn fail ${failActive}" onclick="window._setCheckpoint(${i},'fail')" title="Fail" style="width:30px;height:30px;font-size:.68rem;font-weight:700">F</button>
+           <button class="check-btn pass ${cp.result === 'pass' ? 'active' : ''}" onclick="window._setCheckpoint(${i},'pass')" title="Pass" style="width:30px;height:30px;font-size:.68rem;font-weight:700">P</button>
+           <button class="check-btn fail ${cp.result === 'fail' ? 'active' : ''}" onclick="window._setCheckpoint(${i},'fail')" title="Fail" style="width:30px;height:30px;font-size:.68rem;font-weight:700">F</button>
          </div>`;
 
     const numericRow = isNumeric ? `
@@ -380,16 +378,16 @@ function renderCheckpointStep() {
 
     const failNoteRow = isFail ? `
       <div style="margin-top:8px">
-        <textarea class="form-textarea" id="cp-note-${i}" style="min-height:64px;font-size:.82rem;border-color:${needNote?'var(--danger)':'var(--border)'}"
-          placeholder="Required: describe what you found..."
+        <textarea class="form-textarea" style="min-height:64px;font-size:.82rem;border-color:${needNote?'var(--danger)':'var(--border)'}"
+          placeholder="Required: describe what you found…"
           oninput="window._setCheckpointNotes(${i},this.value)">${esc(cp.notes ?? '')}</textarea>
-        ${needNote?`<div id="cp-note-hint-${i}" style="font-size:.72rem;color:var(--danger);margin-top:3px">Fail note required before advancing</div>`:''}
+        ${needNote?`<div style="font-size:.72rem;color:var(--danger);margin-top:3px">Fail note required before advancing</div>`:''}
       </div>` : '';
 
     const notesRow = (isNotes && cp.result !== 'fail') ? `
       <div style="margin-top:8px">
         <textarea class="form-textarea" style="min-height:56px;font-size:.82rem"
-          placeholder="${esc(cp.description || 'Enter observation...')}"
+          placeholder="${esc(cp.description || 'Enter observation…')}"
           oninput="window._setCheckpointNotes(${i},this.value)">${esc(cp.notes ?? '')}</textarea>
       </div>` : '';
 
@@ -423,16 +421,13 @@ function renderCheckpointStep() {
           <div id="cp-progress-bar" style="height:100%;width:${pct}%;background:${pct===100?'var(--success)':'var(--brand)'};border-radius:99px;transition:width .3s ease"></div>
         </div>
       </div>
-
       <div style="display:flex;justify-content:flex-end">
         <button class="btn btn-ghost btn-sm" onclick="window._passAll()">Pass All</button>
       </div>
-
       ${cardRows}
-
       <div id="fail-count-banner"
         style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:var(--r-md);padding:12px;font-size:.82rem;color:var(--danger);${failCount === 0 ? 'display:none' : ''}">
-        ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed - add notes, then capture details in the next step.
+        ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed — add notes, then capture details in the next step.
       </div>
     </div>
   `;
