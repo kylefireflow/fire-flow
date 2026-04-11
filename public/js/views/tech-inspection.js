@@ -780,41 +780,13 @@ function bindStepEvents(container) {
   window._setCheckpoint = (i, result) => {
     // Toggle: clicking same result again clears it
     draft.checkpoints[i].result = draft.checkpoints[i].result === result ? null : result;
-    const cp  = draft.checkpoints[i];
-    const row = document.getElementById('cp-row-' + i);
-    if (row) {
-      row.style.borderColor = cp.result === 'pass' ? 'rgba(34,197,94,.35)' : cp.result === 'fail' ? 'rgba(239,68,68,.35)' : 'var(--border)';
-      let noteArea = row.querySelector('.fail-note-area');
-      if (cp.result === 'fail' && !noteArea) {
-        noteArea = document.createElement('div');
-        noteArea.className = 'fail-note-area';
-        noteArea.style.marginTop = '8px';
-        const ta = document.createElement('textarea');
-        ta.className = 'form-textarea';
-        ta.style.cssText = 'min-height:64px;font-size:.82rem;border-color:var(--danger);width:100%';
-        ta.placeholder = 'Required: describe what you found…';
-        ta.value = cp.notes ?? '';
-        ta.oninput = function() { window._setCheckpointNotes(i, this.value); };
-        const hint = document.createElement('div');
-        hint.className = 'fail-note-hint';
-        hint.style.cssText = 'font-size:.72rem;color:var(--danger);margin-top:3px';
-        hint.textContent = 'Fail note required before advancing';
-        noteArea.appendChild(ta);
-        noteArea.appendChild(hint);
-        row.appendChild(noteArea);
-      } else if (cp.result !== 'fail') {
-        noteArea?.remove();
-        cp.notes = '';
-      }
-      row.querySelectorAll('.check-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if ((btn.classList.contains('pass') && cp.result === 'pass') ||
-            (btn.classList.contains('fail') && cp.result === 'fail')) {
-          btn.classList.add('active');
-        }
-      });
+    const cp = draft.checkpoints[i];
+    // Re-render the whole checkpoint step so card borders, buttons, and notes fields update correctly
+    const stepContent = document.getElementById('step-content');
+    if (stepContent) {
+      stepContent.innerHTML = renderCheckpointStep();
+      bindCheckpointHandlers();
     }
-    // BUG 2 FIX: update via explicit IDs
     updateCheckpointCounters();
     // Update fail warning banner
     const failCount = draft.checkpoints.filter(c => c.result === 'fail').length;
@@ -822,7 +794,7 @@ function bindStepEvents(container) {
     if (banner) {
       if (failCount > 0) {
         banner.style.display = '';
-        banner.textContent = `⚠ ${failCount} checkpoint${failCount > 1 ? 's' : ''} failed — you'll capture deficiency details in the next step.`;
+        banner.innerHTML = failCount + ' checkpoint' + (failCount > 1 ? 's' : '') + ' failed — add notes, then capture details in the next step.';
       } else {
         banner.style.display = 'none';
       }
