@@ -1124,6 +1124,12 @@ async function submitInspection(container) {
         }
       }
 
+      // Submit the inspection so it transitions from draft → submitted
+      // and triggers the processing pipeline (voice/image workers → report → quote).
+      if (serverId) {
+        await api.submitInspection(serverId);
+      }
+
       // Clean up the photo store now that photos are on the server
       await localPhotos.removeByInspectionId(draft.id).catch(() => {});
 

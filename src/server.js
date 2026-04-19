@@ -954,10 +954,20 @@ async function handleSendQuote(req, res, id) {
     updated_at:          new Date().toISOString(),
   });
 
+  // Emit QUOTE_SENT so the coordinator can enqueue the customer notification
+  const finalQuote = quoteStore.get(id);
+  bus.emit(EventTypes.QUOTE_SENT, {
+    quote_id:       id,
+    customer_email: finalQuote.customer_email,
+    customer_url:   customerUrl,
+    inspection_id:  finalQuote.inspection_id,
+    total:          finalQuote.summary?.total,
+  });
+
   return send(res, 200, {
     success: true,
     data: {
-      quote:          quoteStore.get(id),
+      quote:          finalQuote,
       customer_url:   customerUrl,
       customer_token: customerToken,   // returned once to caller; NOT persisted in full
     },

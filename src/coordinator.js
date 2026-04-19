@@ -58,7 +58,8 @@ import {
 function allMediaProcessed(inspection) {
   const voices = inspection.voice_recordings ?? [];
   const images = inspection.images ?? [];
-  if (voices.length === 0 && images.length === 0) return false;
+  // No media at all → nothing to wait for, consider "processed"
+  if (voices.length === 0 && images.length === 0) return true;
   return (
     voices.every(r => r.processed) &&
     images.every(img => img.processed)
@@ -92,8 +93,37 @@ function handleInspectionSubmitted(event) {
 
   const correlationId = event.correlation_id ?? inspection_id;
 
+  const voices = inspection.voice_recordings ?? [];
+  const images = inspection.images ?? [];
+
+  // If there's no media at all, skip straight to report generation
+  // instead of waiting for VOICE_PROCESSED / IMAGE_PROCESSED events
+  // that will never arrive.
+  if (voices.length === 0 && images.length === 0) {
+    bus.emit(EventTypes.INSPECTION_PROCESSING, { inspection_id }, { correlation_id: correlationId });
+
+    const reportId = randomUUID();
+    inspectionStore.set(inspection_id, {
+      ...inspectionStore.get(inspection_id),
+      report_id:  reportId,
+      updated_at: new Date().toISOString(),
+    });
+
+    queues.report.enqueue({
+      type:            'report',
+      priority:        3,
+      payload:         { inspection_id, report_id: reportId },
+      correlation_id:  correlationId,
+      idempotency_key: `report.${inspection_id}`,
+    });
+
+    bus.emit(EventTypes.REPORT_QUEUED, { inspection_id, report_id: reportId },
+      { correlation_id: correlationId });
+    return;
+  }
+
   // Enqueue voice jobs
-  for (const rec of inspection.voice_recordings ?? []) {
+  for (const rec of voices) {
     if (rec.processed) continue;
     queues.voice.enqueue({
       type:            'voice',
@@ -110,7 +140,7 @@ function handleInspectionSubmitted(event) {
   }
 
   // Enqueue image jobs
-  for (const img of inspection.images ?? []) {
+  for (const img of images) {
     if (img.processed) continue;
     queues.image.enqueue({
       type:           'image',
@@ -272,6 +302,30 @@ function handleQuoteApproved(event) {
   });
 }
 
+function handleQuoteSent(event) {
+  // Called after the /v1/quote/:id/send endpoint transitions the quote to 'sent'
+  // and generates the customer link. We just need to email the customer.
+  const { quote_id, customer_email, inspection_id, total } = event.payload;
+  const correlationId = event.correlation_id ?? quote_id;
+
+  const wfQuote    = quoteStore.get(quote_id);
+  const inspection = wfQuote ? inspectionStore.get(wfQuote.inspection_id) : null;
+  const recipient  = customer_email ?? wfQuote?.customer_email ?? inspection?.customer_email;
+
+  enqueueNotification({
+    channel:       'email',
+    recipient,
+    template:      'quote.sent',
+    data:          {
+      quote_id,
+      customer_email: recipient,
+      total:          total ?? wfQuote?.summary?.total,
+    },
+    metadata:      { quote_id, inspection_id: inspection_id ?? wfQuote?.inspection_id },
+    correlationId,
+  });
+}
+
 function handleQuoteAccepted(event) {
   const { quote_id } = event.payload;
   const wfQuote = quoteStore.get(quote_id);
@@ -356,6 +410,7 @@ export function startCoordinator() {
     bus.on(EventTypes.REPORT_GENERATED,      handleReportGenerated),
     bus.on(EventTypes.QUOTE_GENERATED,       handleQuoteGenerated),
     bus.on(EventTypes.QUOTE_APPROVED,        handleQuoteApproved),
+    bus.on(EventTypes.QUOTE_SENT,            handleQuoteSent),       // send endpoint → email customer
     bus.on(EventTypes.QUOTE_ACCEPTED,        handleQuoteAccepted),   // customer approves
 
     // Failure handlers

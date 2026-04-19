@@ -59,15 +59,41 @@ function renderTemplate(template, data) {
   return `Notification: ${template} — ${JSON.stringify(data)}`;
 }
 
-// ─── Channel senders (stubbed — swap with real providers) ─────────────────────
+// ─── Channel senders ─────────────────────────────────────────────────────────
 
 async function sendEmail(recipient, subject, body) {
   if (process.env.MOCK_WORKERS === 'true') {
-    // console.log(`[MOCK EMAIL] To: ${recipient}\n${subject}\n${body}`);
+    console.log(`[MOCK EMAIL] To: ${recipient} | ${subject}`);
     return { provider: 'mock', message_id: `mock-email-${Date.now()}` };
   }
-  // Real: integrate SendGrid / SES / Postmark
-  throw new Error('Email provider not configured');
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error('RESEND_API_KEY not set — cannot send email');
+
+  const from = process.env.FROM_EMAIL ?? 'Fire Flow <noreply@fireflow.app>';
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      from,
+      to:      [recipient],
+      subject,
+      text:    body,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const err = await response.text().catch(() => '');
+    throw new Error(`Resend API error ${response.status}: ${err}`);
+  }
+
+  const result = await response.json();
+  return { provider: 'resend', message_id: result.id };
 }
 
 async function sendSms(recipient, body) {
