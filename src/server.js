@@ -75,6 +75,11 @@ const PUBLIC_DIR     = resolve(__dirname, '../public');
 // This keeps the real JWT out of URLs, browser history, and server logs.
 const customerLinkStore = new Map();
 
+// Dev mode user store — maps email (lowercase) → { role, company_id, name, password }
+// Populated by signup (admin) and invite (technician). Persists in server memory
+// so dev-mode login can return the correct role after browser reset.
+const devUserStore = new Map();
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript; charset=utf-8',
@@ -585,12 +590,85 @@ async function handleSignup(req, res) {
     // The login.js will hit the Supabase auth endpoint directly (and also fail
     // gracefully if the anon key is a placeholder), so this stays self-contained.
     console.log(`[SIGNUP DEV] Dev mode — admin account creation skipped (plan: ${plan ?? 'starter'})`);
+    devUserStore.set(email.toLowerCase(), { role: 'admin', company_id, name: company_name.trim() });
     return send(res, 201, { success: true, data: {
       email,
       company_id,
       plan:         plan ?? 'starter',
       company_name: company_name.trim(),
       dev_mode:     true,
+    }});
+  }
+}
+
+// POST /v1/auth/invite  — admin-only, creates a technician account
+async function handleInviteTechnician(req, res, user) {
+  const body = await parseBody(req, res);
+  if (body === null) return;
+
+  const { email, password, name } = body;
+
+  if (!email || !password) {
+    return send(res, 400, { success: false, error: {
+      code: 'MISSING_FIELDS', message: 'email and password are required.' } });
+  }
+  if (typeof email !== 'string' || !email.includes('@')) {
+    return send(res, 400, { success: false, error: {
+      code: 'INVALID_EMAIL', message: 'Please provide a valid email address.' } });
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    return send(res, 400, { success: false, error: {
+      code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters.' } });
+  }
+
+  const company_id = user?.company_id ?? 'dev';
+  const SUPABASE_URL = (process.env.SUPABASE_URL ?? '').replace(/\/$/, '');
+  const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY ?? '';
+  const liveMode     = SUPABASE_URL && SERVICE_KEY &&
+                       SERVICE_KEY !== 'your-service-role-key-here';
+
+  if (liveMode) {
+    const adminRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SERVICE_KEY,
+        'Authorization': `Bearer ${SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        email_confirm: true,
+        app_metadata: {
+          role:         'technician',
+          company_id,
+          name:         (name ?? '').trim() || undefined,
+        },
+      }),
+    });
+
+    const adminData = await adminRes.json();
+    if (!adminRes.ok) {
+      const msg = adminData?.msg ?? adminData?.message ?? adminData?.error_description ?? 'Failed to create technician.';
+      if (adminRes.status === 422 && msg.toLowerCase().includes('already')) {
+        return send(res, 409, { success: false, error: {
+          code: 'EMAIL_TAKEN', message: 'An account with that email already exists.' } });
+      }
+      return send(res, adminRes.status, { success: false, error: { code: 'INVITE_FAILED', message: msg } });
+    }
+
+    return send(res, 201, { success: true, data: {
+      email, company_id, role: 'technician', user_id: adminData.id,
+    }});
+
+  } else {
+    // Dev mode — store the technician so dev login returns the correct role
+    devUserStore.set(email.toLowerCase(), {
+      role: 'technician', company_id, name: (name ?? '').trim(),
+    });
+    console.log(`[INVITE DEV] Created technician: ${email} (company: ${company_id})`);
+    return send(res, 201, { success: true, data: {
+      email, company_id, role: 'technician', dev_mode: true,
     }});
   }
 }
@@ -649,9 +727,15 @@ function handleListInspections(req, res, url, user) {
 // GET /v1/jobs  — list with optional ?status=, ?technician_id=, ?date= filters
 function handleListJobs(req, res, url, user) {
   const status       = url.searchParams.get('status');
-  const techId       = url.searchParams.get('technician_id');
+  let   techId       = url.searchParams.get('technician_id');
   const dateFilter   = url.searchParams.get('date');       // YYYY-MM-DD
   const company_id   = user?.company_id;
+
+  // Technicians can ONLY see their own jobs — force-scope the filter
+  if (user?.role === 'technician') {
+    techId = user.sub ?? techId;
+  }
+
   let list = jobStore.values();
   if (company_id) list = list.filter(j => j.company_id === company_id);
   if (status)     list = list.filter(j => j.state === status);
@@ -1225,6 +1309,34 @@ const server = createServer(async (req, res) => {
       return await handleSignup(req, res);
     }
 
+    // Dev-mode login — returns the role for a given email so the frontend
+    // can build the correct JWT and show the right UI. Only active when
+    // Supabase auth is not configured (dev mode).
+    if (path === '/v1/auth/dev-login' && method === 'POST') {
+      if (authEnabled()) {
+        return send(res, 404, { success: false, error: { code: 'NOT_FOUND', message: 'Not available in production.' } });
+      }
+      const body = await parseBody(req, res);
+      if (body === null) return;
+      const email = (body.email ?? '').toLowerCase();
+      const stored = devUserStore.get(email);
+      // If the email was never registered (e.g. first-time admin in dev mode),
+      // default to admin role so the app works out of the box.
+      const role       = stored?.role ?? 'admin';
+      const company_id = stored?.company_id ?? 'dev-company';
+      const userId     = role === 'technician' ? 'dev-tech-' + email : 'dev-user';
+      return send(res, 200, { success: true, data: {
+        role, company_id, user_id: userId, email,
+      }});
+    }
+
+    // Invite technician — admin only
+    if (path === '/v1/auth/invite' && method === 'POST') {
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
+      return await handleInviteTechnician(req, res, user);
+    }
+
     // Stripe webhook — public, but Stripe-signature verified internally
     if (path === '/v1/billing/webhook' && method === 'POST') {
       return await handleStripeWebhook(req, res);
@@ -1258,26 +1370,51 @@ const server = createServer(async (req, res) => {
     // When SUPABASE_JWT_SECRET is set, every route below requires a valid token.
     // Set DISABLE_AUTH=true in .env during local development to skip checks.
 
+    // Dev mode auth helper: extract role from the dev JWT in the Authorization header.
+    // This enforces role-based restrictions even in dev mode so techs can't see admin views.
+    function devUser(allowedRoles) {
+      const header = req.headers['authorization'] ?? '';
+      const token  = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+      let role = 'admin';
+      let sub  = 'dev-user';
+      if (token) {
+        try {
+          const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64').toString('utf8'));
+          role = payload?.app_metadata?.role ?? 'admin';
+          sub  = payload?.sub ?? 'dev-user';
+        } catch {}
+      }
+      // If the caller's role isn't in the allowed list, deny access
+      if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+        const body = JSON.stringify({ success: false, error: { code: 'FORBIDDEN', message: `Requires role: ${allowedRoles.join(' or ')}. Your role: ${role}` } });
+        res.writeHead(403, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) });
+        res.end(body);
+        return null;
+      }
+      return { company_id: 'dev', role, sub };
+    }
+
     // SSE stream — admin only in production
     if (path === '/v1/stream' && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      if (authEnabled()) { if (!requireAuth(req, res, ['admin'])) return; }
+      else { const u = devUser(['admin']); if (!u) return; }
       return handleSSE(req, res);
     }
 
     // Inspection routes — technician or admin
     if (path === '/v1/inspection' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : { company_id: 'dev' };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : devUser(['technician', 'admin']);
+      if (!user) return;
       return await handleCreateInspection(req, res, user);
     }
 
     const inspMatch = path.match(/^\/v1\/inspection\/([^/]+)$/);
     if (inspMatch && method === 'GET') {
-      if (authEnabled()) {
-        const user = requireAuth(req, res, ['technician', 'admin']);
-        if (!user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : devUser(['technician', 'admin']);
+      if (!user) return;
+      if (user.role !== 'admin') {
         const insp = inspectionStore.get(inspMatch[1]);
-        if (insp && user.role !== 'admin' && insp.company_id !== user.company_id) {
+        if (insp && insp.company_id !== user.company_id) {
           return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Access denied.' } });
         }
       }
@@ -1286,45 +1423,49 @@ const server = createServer(async (req, res) => {
 
     const reportMatch = path.match(/^\/v1\/inspection\/([^/]+)\/report$/);
     if (reportMatch && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin', 'technician'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : devUser(['admin', 'technician']);
+      if (!user) return;
       return handleGetInspectionReport(req, res, reportMatch[1]);
     }
 
     const recMatch = path.match(/^\/v1\/inspection\/([^/]+)\/recording$/);
     if (recMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['technician', 'admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : devUser(['technician', 'admin']);
+      if (!user) return;
       return await handleAddRecording(req, res, recMatch[1]);
     }
 
     const imgMatch = path.match(/^\/v1\/inspection\/([^/]+)\/image$/);
     if (imgMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['technician', 'admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : devUser(['technician', 'admin']);
+      if (!user) return;
       return await handleAddImage(req, res, imgMatch[1]);
     }
 
     const submitMatch = path.match(/^\/v1\/inspection\/([^/]+)\/submit$/);
     if (submitMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['technician', 'admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['technician', 'admin']) : devUser(['technician', 'admin']);
+      if (!user) return;
       return await handleSubmitInspection(req, res, submitMatch[1]);
     }
 
     // List endpoints — admin only
     if (path === '/v1/inspections' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev' };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return handleListInspections(req, res, url, user);
     }
 
     if (path === '/v1/jobs' && method === 'GET') {
       // Technicians can query their own jobs; admins can query all
-      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : { company_id: 'dev' };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : devUser(['admin', 'technician']);
+      if (!user) return;
       return handleListJobs(req, res, url, user);
     }
 
     if (path === '/v1/quotes' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev' };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return handleListQuotes(req, res, url, user);
     }
 
@@ -1347,116 +1488,117 @@ const server = createServer(async (req, res) => {
 
     // Quote routes — admin creates/approves/rejects, customer accepts/rejects
     if (path === '/v1/quote' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev' };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleCreateQuote(req, res, user);
     }
 
     const quoteMatch = path.match(/^\/v1\/quote\/([^/]+)$/);
     if (quoteMatch && method === 'GET') {
-      if (authEnabled()) {
-        const user = requireAuth(req, res, ['admin', 'customer']);
-        if (!user) return;
-        // Customer tokens are scoped to a single quote
-        if (user.role === 'customer' && user.quote_id !== quoteMatch[1]) {
-          return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Token is not valid for this quote.' } });
-        }
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'customer']) : devUser(['admin']);
+      if (!user) return;
+      if (user.role === 'customer' && user.quote_id !== quoteMatch[1]) {
+        return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Token is not valid for this quote.' } });
       }
       return handleGetQuote(req, res, quoteMatch[1]);
     }
 
     const sendMatch = path.match(/^\/v1\/quote\/([^/]+)\/send$/);
     if (sendMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleSendQuote(req, res, sendMatch[1]);
     }
 
     const approveMatch = path.match(/^\/v1\/quote\/([^/]+)\/approve$/);
     if (approveMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleApproveQuote(req, res, approveMatch[1]);
     }
 
     const adminRejectMatch = path.match(/^\/v1\/quote\/([^/]+)\/reject$/);
     if (adminRejectMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleAdminRejectQuote(req, res, adminRejectMatch[1]);
     }
 
     // Customer routes — verified by customer quote token
     const acceptMatch = path.match(/^\/v1\/quote\/([^/]+)\/accept$/);
     if (acceptMatch && method === 'POST') {
-      if (authEnabled()) {
-        const user = requireAuth(req, res, ['customer', 'admin']);
-        if (!user) return;
-        // Customer tokens are locked to a specific quote
-        if (user.role === 'customer' && user.quote_id !== acceptMatch[1]) {
-          return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Token is not valid for this quote.' } });
-        }
+      const user = authEnabled() ? requireAuth(req, res, ['customer', 'admin']) : devUser(['customer', 'admin']);
+      if (!user) return;
+      if (user.role === 'customer' && user.quote_id !== acceptMatch[1]) {
+        return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Token is not valid for this quote.' } });
       }
       return await handleAcceptQuote(req, res, acceptMatch[1]);
     }
 
     const custRejectMatch = path.match(/^\/v1\/quote\/([^/]+)\/customer-reject$/);
     if (custRejectMatch && method === 'POST') {
-      if (authEnabled()) {
-        const user = requireAuth(req, res, ['customer', 'admin']);
-        if (!user) return;
-        if (user.role === 'customer' && user.quote_id !== custRejectMatch[1]) {
-          return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Token is not valid for this quote.' } });
-        }
+      const user = authEnabled() ? requireAuth(req, res, ['customer', 'admin']) : devUser(['customer', 'admin']);
+      if (!user) return;
+      if (user.role === 'customer' && user.quote_id !== custRejectMatch[1]) {
+        return send(res, 403, { success: false, error: { code: 'FORBIDDEN', message: 'Token is not valid for this quote.' } });
       }
       return await handleRejectQuote(req, res, custRejectMatch[1]);
     }
 
-    // Job routes — admin only
+    // Job routes — admin only for get/assign, tech+admin for start/complete
     const jobMatch = path.match(/^\/v1\/job\/([^/]+)$/);
     if (jobMatch && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : devUser(['admin', 'technician']);
+      if (!user) return;
       return handleGetJob(req, res, jobMatch[1]);
     }
 
     const assignMatch = path.match(/^\/v1\/job\/([^/]+)\/assign$/);
     if (assignMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleAssignJob(req, res, assignMatch[1]);
     }
 
     const startMatch = path.match(/^\/v1\/job\/([^/]+)\/start$/);
     if (startMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin', 'technician'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : devUser(['admin', 'technician']);
+      if (!user) return;
       return handleStartJob(req, res, startMatch[1]);
     }
 
     const completeMatch = path.match(/^\/v1\/job\/([^/]+)\/complete$/);
     if (completeMatch && method === 'POST') {
-      if (authEnabled() && !requireAuth(req, res, ['admin', 'technician'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin', 'technician']) : devUser(['admin', 'technician']);
+      if (!user) return;
       return handleCompleteJob(req, res, completeMatch[1]);
     }
 
     // Queue management — admin only
     if (path === '/v1/queue/stats' && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return handleQueueStats(req, res);
     }
     if (path === '/v1/queue/dlq' && method === 'GET') {
-      if (authEnabled() && !requireAuth(req, res, ['admin'])) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return handleQueueDlq(req, res);
     }
 
     // Billing routes — admin only
     // Company branding — admin only
     if (path === '/v1/company/branding' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       const company_id = user?.company_id ?? user?.sub ?? 'default';
       const company = companyStore.get(company_id) ?? {};
       return send(res, 200, { success: true, data: company.branding ?? {} });
     }
 
     if (path === '/v1/company/branding' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: null, sub: null };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       const company_id = user?.company_id ?? user?.sub ?? 'default';
       let brandRaw;
       try { brandRaw = await readBody(req, 5 * 1024 * 1024); } // 5MB for logo
@@ -1475,8 +1617,8 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/v1/billing/usage' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       const company_id = user?.company_id ?? user?.sub ?? null;
       const company    = company_id ? (companyStore.get(company_id) ?? {}) : {};
       const plan       = company.plan ?? 'starter';
@@ -1497,18 +1639,18 @@ const server = createServer(async (req, res) => {
     }
 
     if (path === '/v1/billing/subscription' && method === 'GET') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return handleGetSubscription(req, res, user);
     }
     if (path === '/v1/billing/checkout' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleCreateCheckout(req, res, user);
     }
     if (path === '/v1/billing/portal' && method === 'POST') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev', email: null };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       return await handleCreatePortal(req, res, user);
     }
 
@@ -1516,8 +1658,8 @@ const server = createServer(async (req, res) => {
     // for hard-deletion by the nightly retention cleanup (after RETENTION_DAYS).
     // Requires admin auth on the company being erased.
     if (path === '/v1/company' && method === 'DELETE') {
-      const user = authEnabled() ? requireAuth(req, res, ['admin']) : { company_id: 'dev', sub: 'dev' };
-      if (authEnabled() && !user) return;
+      const user = authEnabled() ? requireAuth(req, res, ['admin']) : devUser(['admin']);
+      if (!user) return;
       const company_id = user?.company_id ?? user?.sub;
       if (!company_id) return send(res, 400, { success: false, error: { code: 'NO_COMPANY', message: 'No company_id on token.' } });
 

@@ -8,6 +8,7 @@
 
 import { api } from '../api.js';
 import { generateQuoteHTML } from '../quote-pdf.js';
+import { registerDevTechnician, DEV_MODE } from '../auth.js';
 
 const DEFAULT_BRANDING = {
   companyName:    '',
@@ -146,6 +147,35 @@ function renderBody(el, branding) {
           </div>
         </div>
 
+        <!-- Invite Technician card -->
+        <div class="card" style="padding:24px">
+          <div class="section-title" style="margin-bottom:6px">Invite Technician</div>
+          <p style="font-size:.82rem;color:var(--text-muted);margin:0 0 16px">
+            Create a login for a technician. They'll only see the inspection form — no access to billing, quotes, or settings.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Name</label>
+                <input class="form-input" id="invite-name" placeholder="John Smith">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Email <span style="color:var(--error)">*</span></label>
+                <input class="form-input" id="invite-email" type="email" placeholder="tech@company.com">
+              </div>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Temporary Password <span style="color:var(--error)">*</span></label>
+              <input class="form-input" id="invite-password" type="text" placeholder="Min 8 characters" minlength="8">
+            </div>
+            <div id="invite-result" style="display:none"></div>
+            <button class="btn btn-primary btn-sm" id="invite-btn" style="align-self:flex-start"
+              onclick="window._csInviteTech()">
+              Create Technician Account
+            </button>
+          </div>
+        </div>
+
         <!-- Save button -->
         <button class="btn btn-primary" id="cs-save-btn" style="align-self:flex-start;padding:12px 28px;font-size:.95rem"
           onclick="window._csSave()">
@@ -189,9 +219,55 @@ function renderBody(el, branding) {
   window._csRemoveLogo       = removeLogo;
   window._csRefreshPreview   = refreshPreview;
   window._csSave             = save;
+  window._csInviteTech       = inviteTechnician;
 
   // Initial preview render
   refreshPreview();
+}
+
+// ─── Invite technician ───────────────────────────────────────────────────────
+
+async function inviteTechnician() {
+  const name     = document.getElementById('invite-name')?.value.trim() ?? '';
+  const email    = document.getElementById('invite-email')?.value.trim() ?? '';
+  const password = document.getElementById('invite-password')?.value ?? '';
+  const resultEl = document.getElementById('invite-result');
+  const btn      = document.getElementById('invite-btn');
+
+  if (!email || !password) {
+    if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = `<span style="color:var(--danger);font-size:.82rem">Email and password are required.</span>`; }
+    return;
+  }
+  if (password.length < 8) {
+    if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = `<span style="color:var(--danger);font-size:.82rem">Password must be at least 8 characters.</span>`; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+
+  try {
+    await api.inviteTechnician({ email, password, name: name || undefined });
+    // In dev mode, register the email so login assigns the 'technician' role
+    if (DEV_MODE) registerDevTechnician(email);
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `<span style="color:var(--success);font-size:.82rem">Technician account created for <strong>${esc(email)}</strong>. They can now log in and submit inspections.</span>`;
+    }
+    // Clear the form
+    const nameEl = document.getElementById('invite-name');
+    const emailEl = document.getElementById('invite-email');
+    const pwEl = document.getElementById('invite-password');
+    if (nameEl) nameEl.value = '';
+    if (emailEl) emailEl.value = '';
+    if (pwEl) pwEl.value = '';
+  } catch (err) {
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `<span style="color:var(--danger);font-size:.82rem">${esc(err.message ?? 'Failed to create technician.')}</span>`;
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Technician Account'; }
+  }
 }
 
 // ─── Logo upload ──────────────────────────────────────────────────────────────

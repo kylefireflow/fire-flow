@@ -25,7 +25,26 @@ let _supabaseAnonKey = '';
 // In dev mode, login creates a synthetic local token and the server skips auth.
 export let DEV_MODE = true;  // starts true, flipped to false after config loads
 
+// Dev mode technician registry — tracks emails that were invited as technicians
+// so they log in with role 'technician' instead of the default 'admin'.
+let _devTechnicians = new Set();
+
+/** Register an email as a dev-mode technician (called after invite) */
+export function registerDevTechnician(email) {
+  _devTechnicians.add(email?.toLowerCase());
+  // Persist so it survives page reload
+  try { sessionStorage.setItem('ff_dev_techs', JSON.stringify([..._devTechnicians])); } catch {}
+}
+
+function _loadDevTechnicians() {
+  try {
+    const raw = sessionStorage.getItem('ff_dev_techs');
+    if (raw) _devTechnicians = new Set(JSON.parse(raw));
+  } catch {}
+}
+
 export async function initAuth() {
+  _loadDevTechnicians();
   try {
     const res  = await fetch('/v1/config');
     const data = await res.json();
@@ -78,30 +97,47 @@ export function getCompanyId() {
   return getCurrentUser()?.app_metadata?.company_id ?? null;
 }
 
-function _makeDevToken(email) {
+function _makeDevToken(email, role = 'admin', userId = 'dev-user') {
   // Build a minimal JWT-shaped string so isLoggedIn()'s exp check passes.
   // NOT a real JWT — only used client-side in dev mode.
   const header  = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
   const payload = btoa(JSON.stringify({
-    sub:   'dev-user',
+    sub:   userId,
     email,
     exp:   Math.floor(Date.now() / 1000) + 60 * 60 * 8, // 8 hours
-    app_metadata:  { role: 'admin', company_id: 'dev-company' },
-    user_metadata: { role: 'admin' },
+    app_metadata:  { role, company_id: 'dev-company' },
+    user_metadata: { role },
   }));
   return `${header}.${payload}.dev`;
 }
 
 export async function login(email, password) {
-  // ── Dev mode: skip Supabase, create synthetic session ──────────────────────
+  // ── Dev mode: ask the server for the role, then create synthetic session ────
   if (DEV_MODE) {
+    // Query the server's dev user store for this email's role.
+    // This survives browser resets because the server holds the registry in memory.
+    let role = _devTechnicians.has(email?.toLowerCase()) ? 'technician' : 'admin';
+    let userId = role === 'technician' ? 'dev-tech-' + email : 'dev-user';
+    try {
+      const devRes = await fetch('/v1/auth/dev-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (devRes.ok) {
+        const devData = await devRes.json();
+        role   = devData.data?.role ?? role;
+        userId = devData.data?.user_id ?? userId;
+      }
+    } catch {} // If server is unreachable, fall back to local registry
+
     const devUser = {
-      id:    'dev-user',
+      id:    userId,
       email,
-      app_metadata:  { role: 'admin', company_id: 'dev-company' },
-      user_metadata: { role: 'admin' },
+      app_metadata:  { role, company_id: 'dev-company' },
+      user_metadata: { role },
     };
-    _ssSet(KEY_TOKEN, _makeDevToken(email));
+    _ssSet(KEY_TOKEN, _makeDevToken(email, role, userId));
     _ssSet(KEY_USER,  JSON.stringify(devUser));
     return devUser;
   }

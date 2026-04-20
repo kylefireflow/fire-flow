@@ -65,8 +65,9 @@ export function resetSessionExpiredFlag() {
 }
 
 export const api = {
-  // Auth (public — no token required)
-  signup: (body) => request('POST', '/v1/auth/signup', body),
+  // Auth
+  signup:           (body) => request('POST', '/v1/auth/signup', body),
+  inviteTechnician: (body) => request('POST', '/v1/auth/invite', body),
 
   // Health
   health: () => request('GET', '/health'),
