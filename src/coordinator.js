@@ -69,7 +69,10 @@ function allMediaProcessed(inspection) {
 // ─── Helper: enqueue notification ────────────────────────────────────────────
 
 function enqueueNotification({ channel, recipient, template, data, metadata, correlationId }) {
-  if (!recipient) return;   // Skip if no contact info provided
+  if (!recipient) {
+    console.warn(`[COORDINATOR] Skipped ${channel} notification "${template}" — no recipient (check that customer_email is set on the source entity)`);
+    return;
+  }
   queues.notify.enqueue({
     type:           'notify',
     priority:       7,          // Low — notifications are best-effort
