@@ -5,7 +5,7 @@
   "description": "Event-driven workflow engine for the Fire Flow inspection platform",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
     "test": "node --experimental-vm-modules tests/test.js"
   },
   "engines": {

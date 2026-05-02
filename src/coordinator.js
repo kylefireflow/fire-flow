@@ -49,7 +49,7 @@ import { bus, EventTypes }   from './events.js';
 import { queues }            from './queue.js';
 import {
   InspectionMachine, QuoteMachine, JobMachine,
-  inspectionStore, quoteStore, jobStore,
+  inspectionStore, quoteStore, jobStore, companyStore,
   createQuote, createJob,
 } from './state.js';
 
@@ -204,11 +204,12 @@ function handleReportGenerated(event) {
 
   bus.emit(EventTypes.INSPECTION_COMPLETE, { inspection_id }, { correlation_id: correlationId });
 
-  // Create quote entity
+  // Create quote entity — propagate customer email from inspection
   const wfQuote = createQuote({
-    company_id:    inspection.company_id,
-    customer_id:   inspection.customer_id,
+    company_id:     inspection.company_id,
+    customer_id:    inspection.customer_id,
     inspection_id,
+    customer_email: inspection.customer_email,
   });
 
   // Link quote to inspection
@@ -260,11 +261,14 @@ function handleQuoteGenerated(event) {
     quoteStore.applyTransition(quote_id, QuoteMachine, 'complete');   // → review
   } catch (_) { return; }
 
-  // Notify admin
+  // Notify admin — resolve admin email from inspection or company
   const inspection = inspectionStore.get(wfQuote.inspection_id);
+  const adminEmail = inspection?.admin_email
+    ?? companyStore.get(wfQuote.company_id)?.admin_email
+    ?? null;
   enqueueNotification({
     channel:       'email',
-    recipient:     inspection?.admin_email,
+    recipient:     adminEmail,
     template:      'quote.ready',
     data:          { quote_id, total, inspection_id: wfQuote.inspection_id },
     metadata:      { quote_id, inspection_id: wfQuote.inspection_id },
@@ -295,6 +299,7 @@ function handleQuoteApproved(event) {
     data:          {
       quote_id,
       customer_email: wfQuote.customer_email ?? inspection?.customer_email,
+      customer_url:   wfQuote.customer_url,
       total:          wfQuote.summary?.total,
     },
     metadata:      { quote_id, inspection_id: wfQuote.inspection_id },
@@ -305,7 +310,7 @@ function handleQuoteApproved(event) {
 function handleQuoteSent(event) {
   // Called after the /v1/quote/:id/send endpoint transitions the quote to 'sent'
   // and generates the customer link. We just need to email the customer.
-  const { quote_id, customer_email, inspection_id, total } = event.payload;
+  const { quote_id, customer_email, customer_url, inspection_id, total } = event.payload;
   const correlationId = event.correlation_id ?? quote_id;
 
   const wfQuote    = quoteStore.get(quote_id);
@@ -319,6 +324,7 @@ function handleQuoteSent(event) {
     data:          {
       quote_id,
       customer_email: recipient,
+      customer_url:   customer_url ?? wfQuote?.customer_url,
       total:          total ?? wfQuote?.summary?.total,
     },
     metadata:      { quote_id, inspection_id: inspection_id ?? wfQuote?.inspection_id },
@@ -338,14 +344,16 @@ function handleQuoteAccepted(event) {
     quoteStore.applyTransition(quote_id, QuoteMachine, 'customer_approve');
   } catch (_) { return; }
 
-  // Create job
+  // Create job — propagate technician from the original inspection
   const inspection = inspectionStore.get(wfQuote.inspection_id);
   const job = createJob({
-    company_id:    wfQuote.company_id,
-    customer_id:   wfQuote.customer_id,
-    inspection_id: wfQuote.inspection_id,
+    company_id:      wfQuote.company_id,
+    customer_id:     wfQuote.customer_id,
+    inspection_id:   wfQuote.inspection_id,
     quote_id,
-    scheduled_date: null,   // TBD — scheduling happens separately
+    scheduled_date:  null,   // TBD — scheduling happens separately
+    technician_id:   inspection?.technician_id ?? null,
+    technician_email: inspection?.technician_email ?? null,
   });
 
   // Transition job pending → scheduled (once a date is set, for now stay pending)
@@ -358,16 +366,34 @@ function handleQuoteAccepted(event) {
     company_id:    wfQuote.company_id,
   }, { correlation_id: correlationId });
 
-  // Notify company
+  // Notify company admin that customer approved the quote
+  const adminEmail = inspection?.admin_email
+    ?? companyStore.get(wfQuote.company_id)?.admin_email
+    ?? null;
   enqueueNotification({
     channel:       'email',
-    recipient:     inspection?.admin_email,
+    recipient:     adminEmail,
     template:      'quote.approved',
     data:          {
       quote_id,
       total:         wfQuote.summary?.total,
     },
     metadata:      { quote_id, job_id: job.id },
+    correlationId,
+  });
+
+  // Notify technician about the new job
+  enqueueNotification({
+    channel:       'email',
+    recipient:     inspection?.technician_email ?? null,
+    template:      'job.scheduled',
+    data:          {
+      scheduled_date: job.scheduled_date,
+      address:        inspection?.address,
+      job_id:         job.id,
+      quote_id,
+    },
+    metadata:      { job_id: job.id, quote_id },
     correlationId,
   });
 }

@@ -287,7 +287,7 @@ import { randomUUID } from 'node:crypto';
 /**
  * Create a new inspection entity in DRAFT state.
  */
-export function createInspection({ company_id, technician_id, address, inspection_type = 'routine', notes = '' } = {}) {
+export function createInspection({ company_id, technician_id, technician_email = null, admin_email = null, customer_email = null, address, inspection_type = 'routine', notes = '' } = {}) {
   const id = randomUUID();
   const now = new Date().toISOString();
   const entity = {
@@ -296,6 +296,9 @@ export function createInspection({ company_id, technician_id, address, inspectio
     previous_state:   null,
     company_id,
     technician_id,
+    technician_email,
+    admin_email,
+    customer_email,
     address,
     inspection_type,
     notes,
@@ -315,7 +318,7 @@ export function createInspection({ company_id, technician_id, address, inspectio
 /**
  * Create a new quote entity in DRAFT state, linked to an inspection.
  */
-export function createQuote({ company_id, customer_id, inspection_id } = {}) {
+export function createQuote({ company_id, customer_id, inspection_id, customer_email = null } = {}) {
   const id = randomUUID();
   const now = new Date().toISOString();
   const entity = {
@@ -325,6 +328,7 @@ export function createQuote({ company_id, customer_id, inspection_id } = {}) {
     company_id,
     customer_id,
     inspection_id,
+    customer_email,
     line_items:     [],
     summary:        null,
     engine_quote_id: null,    // ID from quote-engine service
@@ -339,7 +343,7 @@ export function createQuote({ company_id, customer_id, inspection_id } = {}) {
 /**
  * Create a new job entity in PENDING state, linked to an approved quote.
  */
-export function createJob({ company_id, customer_id, inspection_id, quote_id, scheduled_date = null } = {}) {
+export function createJob({ company_id, customer_id, inspection_id, quote_id, scheduled_date = null, technician_id = null, technician_email = null } = {}) {
   const id = randomUUID();
   const now = new Date().toISOString();
   const entity = {
@@ -351,7 +355,8 @@ export function createJob({ company_id, customer_id, inspection_id, quote_id, sc
     inspection_id,
     quote_id,
     scheduled_date,
-    technician_id:  null,
+    technician_id,
+    technician_email,
     created_at:     now,
     updated_at:     now,
     state_history:  [],

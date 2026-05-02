@@ -67,6 +67,10 @@ import {
   requireAuth, requireCompanyAuth,
   generateCustomerToken, authEnabled,
 } from './auth.js';
+import { startNotifyWorker } from './workers/notify.worker.js';
+import { startQuoteWorker }  from './workers/quote.worker.js';
+import { startVoiceWorker }  from './workers/voice.worker.js';
+import { startImageWorker }  from './workers/image.worker.js';
 
 const __dirname      = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC_DIR     = resolve(__dirname, '../public');
@@ -680,9 +684,32 @@ async function handleCreateInspection(req, res, user) {
 
   // company_id MUST come from the verified JWT — never from the request body
   const company_id = user?.company_id ?? 'dev';
-  const { technician_id, address, inspection_type, notes, metadata } = body;
+  const { technician_id, address, inspection_type, notes, metadata, technician_email, customer_email } = body;
 
-  const inspection = createInspection({ company_id, technician_id, address, inspection_type, notes });
+  // Resolve admin email from the authenticated user (the admin creating the inspection)
+  const admin_email = user?.email ?? null;
+
+  // Resolve technician email: prefer explicit body field, fall back to devUserStore lookup
+  let resolved_tech_email = technician_email ?? null;
+  if (!resolved_tech_email && technician_id) {
+    // Try to find technician email from dev user store (keyed by email)
+    for (const [email, info] of devUserStore.entries()) {
+      if (info.role === 'technician' && info.company_id === company_id) {
+        // In dev mode technician_id is 'dev-tech-{email}', so check for a match
+        if (technician_id === `dev-tech-${email}` || technician_id === email) {
+          resolved_tech_email = email;
+          break;
+        }
+      }
+    }
+  }
+
+  const inspection = createInspection({
+    company_id, technician_id, address, inspection_type, notes,
+    technician_email: resolved_tech_email,
+    admin_email,
+    customer_email: customer_email ?? null,
+  });
 
   // FIX: merge metadata (checkpoints, deficiencies, location details) that the tech app sends
   // Previously this field was silently dropped, causing admin views to show no real data.
@@ -1739,6 +1766,14 @@ async function bootstrap() {
 server.listen(PORT, HOST, async () => {
   console.log(`Fire Flow Workflow Engine listening on ${HOST}:${PORT}`);
   await bootstrap();
+
+  // Start background workers — these consume jobs from the in-memory queues.
+  // Without these, enqueued notifications/quotes/etc. sit in the queue forever.
+  startNotifyWorker();
+  startQuoteWorker();
+  startVoiceWorker();
+  startImageWorker();
+  console.log('[WORKERS] notify, quote, voice, image workers started');
 });
 server.on('error', err => { console.error('Server error:', err); process.exit(1); });
 
